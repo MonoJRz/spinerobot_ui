@@ -96,32 +96,70 @@ class MPRPanel(QFrame):
         self.window_level.SetInputConnection(self.reslice.GetOutputPort())
         self.window_level.SetOutputFormatToRGBA()
 
-        self.actor = vtk.vtkImageActor()
-        self.actor.GetMapper().SetInputConnection(self.window_level.GetOutputPort())
-        self._actor_added = False
 
+        # Segmentation pipeline
         self.segmentation_reslice = vtk.vtkImageReslice()
         self.segmentation_reslice.SetOutputDimensionality(2)
         self.segmentation_reslice.SetInterpolationModeToNearestNeighbor()
+
         self.segmentation_colors = vtk.vtkImageMapToColors()
         self.segmentation_colors.SetLookupTable(
-            create_segmentation_lookup_table(opacity=MPR_SEGMENTATION_OPACITY)
+            create_segmentation_lookup_table(opacity=1.0)
         )
-        self.segmentation_colors.SetInputConnection(self.segmentation_reslice.GetOutputPort())
+        self.segmentation_colors.SetInputConnection(
+            self.segmentation_reslice.GetOutputPort()
+        )
         self.segmentation_colors.SetOutputFormatToRGBA()
-        self.segmentation_colors.PassAlphaToOutputOn()
-        self.segmentation_actor = vtk.vtkImageActor()
-        self.segmentation_actor.GetMapper().SetInputConnection(
-            self.segmentation_colors.GetOutputPort()
+
+
+        # Blend pipeline
+        self.image_blend = vtk.vtkImageBlend()
+        self.image_blend.SetBlendModeToNormal()
+
+        # CT is always input 0
+        self.image_blend.AddInputConnection(
+            self.window_level.GetOutputPort()
         )
-        self.segmentation_actor.GetProperty().SetOpacity(1.0)
-        self.segmentation_actor.ForceTranslucentOn()
-        self.segmentation_actor.SetPosition(0.0, 0.0, 0.1)
-        self.segmentation_actor.SetVisibility(False)
-        self.renderer.AddActor(self.segmentation_actor)
+        self.image_blend.SetOpacity(0, 1.0)
+
+
+        # Final MPR actor
+        self.actor = vtk.vtkImageActor()
+        self.actor.GetMapper().SetInputConnection(
+            self.image_blend.GetOutputPort()
+        )
+
+        self._actor_added = False
+        self._has_segmentation = False
 
         self.renderer.GetActiveCamera().ParallelProjectionOn()
         self.interactor.Initialize()
+
+    def set_segmentation(self, segmentation: SegmentationVolume) -> None:
+        self.segmentation_reslice.SetInputData(segmentation.vtk_image)
+
+        if not self._has_segmentation:
+            self.image_blend.AddInputConnection(
+                self.segmentation_colors.GetOutputPort()
+            )
+            self._has_segmentation = True
+
+        self.image_blend.SetOpacity(
+            1,
+            MPR_SEGMENTATION_OPACITY,
+        )
+
+        if self.image is not None:
+            self._update_reslice(self.slider.value())
+            self.image_blend.Update()
+            self.render()
+    def clear_segmentation(self) -> None:
+        if self._has_segmentation:
+            self.image_blend.RemoveInputConnection(0, 1)
+            self._has_segmentation = False
+
+        self.segmentation_reslice.RemoveAllInputs()
+        self.render()
 
     def set_volume(self, volume: MedicalVolume) -> None:
         image = volume.vtk_image
@@ -149,18 +187,6 @@ class MPRPanel(QFrame):
         self._update_reslice(self.slider.value())
         self.renderer.ResetCamera()
         self.renderer.GetActiveCamera().ParallelProjectionOn()
-        self.render()
-
-    def set_segmentation(self, segmentation: SegmentationVolume) -> None:
-        self.segmentation_reslice.SetInputData(segmentation.vtk_image)
-        self.segmentation_actor.SetVisibility(True)
-        if self.image is not None:
-            self._update_reslice(self.slider.value())
-            self.render()
-
-    def clear_segmentation(self) -> None:
-        self.segmentation_reslice.RemoveAllInputs()
-        self.segmentation_actor.SetVisibility(False)
         self.render()
 
     def set_window_level(self, window: float, level: float) -> None:
@@ -315,9 +341,15 @@ class MPRPanel(QFrame):
         self.reslice.SetResliceAxes(axes)
         self.reslice.Update()
 
-        if self.segmentation_actor.GetVisibility():
+        if self._has_segmentation:
             self.segmentation_reslice.SetResliceAxes(axes)
-            self.segmentation_reslice.SetOutputSpacing(self.reslice.GetOutputSpacing())
-            self.segmentation_reslice.SetOutputOrigin(self.reslice.GetOutputOrigin())
-            self.segmentation_reslice.SetOutputExtent(self.reslice.GetOutputExtent())
+            self.segmentation_reslice.SetOutputSpacing(
+                self.reslice.GetOutputSpacing()
+            )
+            self.segmentation_reslice.SetOutputOrigin(
+                self.reslice.GetOutputOrigin()
+            )
+            self.segmentation_reslice.SetOutputExtent(
+                self.reslice.GetOutputExtent()
+            )
             self.segmentation_reslice.Update()
