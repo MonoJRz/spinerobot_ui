@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QGridLayout, QWidget
 
 from ..core import SliceOrientation
 from ..imaging.models import MedicalVolume
+from ..segmentation import SegmentationVolume
 from .mpr import MPRPanel
 from .volume3d import Volume3DPanel
 
@@ -47,6 +48,16 @@ class ImagingWorkspace(QWidget):
         for view in self.mpr_views:
             view.set_volume(volume)
         self.three_d.set_volume(volume)
+
+    def set_segmentation(self, segmentation: SegmentationVolume) -> None:
+        for view in self.mpr_views:
+            view.set_segmentation(segmentation)
+        self.three_d.set_segmentation(segmentation)
+
+    def clear_segmentation(self) -> None:
+        for view in self.mpr_views:
+            view.clear_segmentation()
+        self.three_d.clear_segmentation()
 
     def set_window_level(self, window: float, level: float) -> None:
         for view in self.mpr_views:

@@ -218,6 +218,22 @@ QLabel#StatusWaiting {
     color: #91a6b3;
 }
 
+QProgressBar#SegmentationLoadProgress {
+    background: #101a20;
+    color: #e2edf2;
+    border: 1px solid #35566b;
+    border-radius: 5px;
+    min-height: 20px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QProgressBar#SegmentationLoadProgress::chunk {
+    background: #4385a8;
+    border-radius: 4px;
+}
+
 QComboBox {
     background: #111a20;
     color: #e3ebef;
@@ -341,6 +357,29 @@ QLabel#ViewerTitle {
 QLabel#ViewerMeta {
     color: #8eb5ca;
     font-size: 11px;
+}
+
+QPushButton#ViewModeButton {
+    background: #172b38;
+    color: #9fc9df;
+    border: 1px solid #315a72;
+    border-radius: 5px;
+    min-height: 28px;
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QPushButton#ViewModeButton:checked {
+    background: #126f72;
+    color: white;
+    border-color: #35c6c0;
+}
+
+QPushButton#ViewModeButton:disabled {
+    background: #151b1f;
+    color: #59666e;
+    border-color: #28363f;
 }
 
 QPushButton#ViewerToolButton {

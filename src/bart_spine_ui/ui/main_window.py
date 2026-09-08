@@ -1,7 +1,9 @@
 from PySide6.QtWidgets import QMainWindow
 
+from ..controllers import ImagingController
 from .pages.imaging_page import ImagingPage
 from .pages.placeholder_page import PlaceholderPage
+from .pages.planning_page import PlanningPage
 from .procedure_shell import ProcedureShell
 
 
@@ -20,15 +22,18 @@ class MainWindow(QMainWindow):
         self._register_workflows()
 
     def _register_workflows(self) -> None:
-        setup = ImagingPage()
+        # Setup and Planning share the same CT state.
+        self.imaging_controller = ImagingController(parent=self)
+
+        setup = ImagingPage(controller=self.imaging_controller)
         setup.dataset_changed.connect(self.procedure_shell.set_dataset_status)
         setup.readiness_changed.connect(self.procedure_shell.set_system_status)
         self.procedure_shell.add_workflow(setup)
 
+        planning = PlanningPage(controller=self.imaging_controller)
+        self.procedure_shell.add_workflow(planning)
+
         # PLACEHOLDER: Replace these pages as each workflow is implemented.
-        self.procedure_shell.add_workflow(
-            PlaceholderPage("planning", "Planning", "Planning workflow — next development stage")
-        )
         self.procedure_shell.add_workflow(
             PlaceholderPage("calibration", "Calibration", "Calibration workflow — next development stage")
         )

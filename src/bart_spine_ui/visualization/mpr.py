@@ -6,6 +6,8 @@ from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from ..core import SliceOrientation
 from ..imaging.models import MedicalVolume
 from ..imaging.presets import default_window_level
+from ..segmentation import SegmentationVolume
+from .segmentation_colors import MPR_SEGMENTATION_OPACITY, create_segmentation_lookup_table
 
 
 class MPRPanel(QFrame):
@@ -98,6 +100,26 @@ class MPRPanel(QFrame):
         self.actor.GetMapper().SetInputConnection(self.window_level.GetOutputPort())
         self._actor_added = False
 
+        self.segmentation_reslice = vtk.vtkImageReslice()
+        self.segmentation_reslice.SetOutputDimensionality(2)
+        self.segmentation_reslice.SetInterpolationModeToNearestNeighbor()
+        self.segmentation_colors = vtk.vtkImageMapToColors()
+        self.segmentation_colors.SetLookupTable(
+            create_segmentation_lookup_table(opacity=MPR_SEGMENTATION_OPACITY)
+        )
+        self.segmentation_colors.SetInputConnection(self.segmentation_reslice.GetOutputPort())
+        self.segmentation_colors.SetOutputFormatToRGBA()
+        self.segmentation_colors.PassAlphaToOutputOn()
+        self.segmentation_actor = vtk.vtkImageActor()
+        self.segmentation_actor.GetMapper().SetInputConnection(
+            self.segmentation_colors.GetOutputPort()
+        )
+        self.segmentation_actor.GetProperty().SetOpacity(1.0)
+        self.segmentation_actor.ForceTranslucentOn()
+        self.segmentation_actor.SetPosition(0.0, 0.0, 0.1)
+        self.segmentation_actor.SetVisibility(False)
+        self.renderer.AddActor(self.segmentation_actor)
+
         self.renderer.GetActiveCamera().ParallelProjectionOn()
         self.interactor.Initialize()
 
@@ -127,6 +149,18 @@ class MPRPanel(QFrame):
         self._update_reslice(self.slider.value())
         self.renderer.ResetCamera()
         self.renderer.GetActiveCamera().ParallelProjectionOn()
+        self.render()
+
+    def set_segmentation(self, segmentation: SegmentationVolume) -> None:
+        self.segmentation_reslice.SetInputData(segmentation.vtk_image)
+        self.segmentation_actor.SetVisibility(True)
+        if self.image is not None:
+            self._update_reslice(self.slider.value())
+            self.render()
+
+    def clear_segmentation(self) -> None:
+        self.segmentation_reslice.RemoveAllInputs()
+        self.segmentation_actor.SetVisibility(False)
         self.render()
 
     def set_window_level(self, window: float, level: float) -> None:
@@ -187,12 +221,26 @@ class MPRPanel(QFrame):
 
         if self.orientation is SliceOrientation.AXIAL:
             position = oz + index * sz
-            axes.DeepCopy((
-                1, 0, 0, cx,
-                0, 1, 0, cy,
-                0, 0, 1, position,
-                0, 0, 0, 1,
-            ))
+            axes.DeepCopy(
+                (
+                    1,
+                    0,
+                    0,
+                    cx,
+                    0,
+                    1,
+                    0,
+                    cy,
+                    0,
+                    0,
+                    1,
+                    position,
+                    0,
+                    0,
+                    0,
+                    1,
+                )
+            )
             self.reslice.SetOutputSpacing(sx, sy, 1.0)
             self.reslice.SetOutputOrigin(
                 -0.5 * (x_count - 1) * sx,
@@ -204,12 +252,26 @@ class MPRPanel(QFrame):
 
         elif self.orientation is SliceOrientation.CORONAL:
             position = oy + index * sy
-            axes.DeepCopy((
-                1, 0, 0, cx,
-                0, 0, 1, position,
-                0, 1, 0, cz,
-                0, 0, 0, 1,
-            ))
+            axes.DeepCopy(
+                (
+                    1,
+                    0,
+                    0,
+                    cx,
+                    0,
+                    0,
+                    1,
+                    position,
+                    0,
+                    1,
+                    0,
+                    cz,
+                    0,
+                    0,
+                    0,
+                    1,
+                )
+            )
             self.reslice.SetOutputSpacing(sx, sz, 1.0)
             self.reslice.SetOutputOrigin(
                 -0.5 * (x_count - 1) * sx,
@@ -221,12 +283,26 @@ class MPRPanel(QFrame):
 
         else:
             position = ox + index * sx
-            axes.DeepCopy((
-                0, 0, 1, position,
-                1, 0, 0, cy,
-                0, 1, 0, cz,
-                0, 0, 0, 1,
-            ))
+            axes.DeepCopy(
+                (
+                    0,
+                    0,
+                    1,
+                    position,
+                    1,
+                    0,
+                    0,
+                    cy,
+                    0,
+                    1,
+                    0,
+                    cz,
+                    0,
+                    0,
+                    0,
+                    1,
+                )
+            )
             self.reslice.SetOutputSpacing(sy, sz, 1.0)
             self.reslice.SetOutputOrigin(
                 -0.5 * (y_count - 1) * sy,
@@ -238,3 +314,10 @@ class MPRPanel(QFrame):
 
         self.reslice.SetResliceAxes(axes)
         self.reslice.Update()
+
+        if self.segmentation_actor.GetVisibility():
+            self.segmentation_reslice.SetResliceAxes(axes)
+            self.segmentation_reslice.SetOutputSpacing(self.reslice.GetOutputSpacing())
+            self.segmentation_reslice.SetOutputOrigin(self.reslice.GetOutputOrigin())
+            self.segmentation_reslice.SetOutputExtent(self.reslice.GetOutputExtent())
+            self.segmentation_reslice.Update()
