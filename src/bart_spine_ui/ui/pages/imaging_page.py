@@ -1,13 +1,7 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (
-    QApplication,
-    QFileDialog,
-    QHBoxLayout,
-    QMessageBox,
-    QProgressDialog,
-)
+from PySide6.QtCore import QTimer, Signal
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox
 
 from ...controllers import ImagingController
 from ...imaging.models import MedicalVolume
@@ -82,9 +76,7 @@ class ImagingPage(WorkflowPage):
             ),
         )
         if path:
-            self._load_with_progress(
-                "Loading CT image...", lambda: self.controller.load_file(path)
-            )
+            self.controller.load_file(path)
 
     def _choose_dicom_directory(self) -> None:
         directory = QFileDialog.getExistingDirectory(
@@ -93,26 +85,7 @@ class ImagingPage(WorkflowPage):
             str(Path.home()),
         )
         if directory:
-            self._load_with_progress(
-                "Loading DICOM series...",
-                lambda: self.controller.load_dicom_directory(directory),
-            )
-
-    def _load_with_progress(self, message: str, loader) -> None:
-        progress = QProgressDialog(message, "", 0, 0, self)
-        progress.setObjectName("MedicalImageLoadProgress")
-        progress.setWindowTitle("Loading medical images")
-        progress.setWindowModality(Qt.WindowModal)
-        progress.setCancelButton(None)
-        progress.setMinimumDuration(0)
-        progress.setAutoClose(False)
-        progress.show()
-        QApplication.processEvents()
-        self.status_changed.emit(message)
-        try:
-            loader()
-        finally:
-            progress.close()
+            self.controller.load_dicom_directory(directory)
 
     def _on_volume_loaded(self, volume: MedicalVolume) -> None:
         self.workspace.set_volume(volume)
