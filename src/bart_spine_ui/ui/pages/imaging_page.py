@@ -1,3 +1,4 @@
+from os import environ
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, Signal
@@ -66,10 +67,11 @@ class ImagingPage(WorkflowPage):
         return "Setup"
 
     def _choose_file(self) -> None:
+        initial_directory = environ.get("BART_DATA_DIR", str(Path.home()))
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Load CT / medical image",
-            str(Path.home()),
+            initial_directory,
             (
                 "Medical images (*.nii *.nii.gz *.nrrd *.nhdr *.mha *.mhd *.dcm);;"
                 "All files (*)"
@@ -79,10 +81,11 @@ class ImagingPage(WorkflowPage):
             self.controller.load_file(path)
 
     def _choose_dicom_directory(self) -> None:
+        initial_directory = environ.get("BART_DATA_DIR", str(Path.home()))
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select DICOM series folder",
-            str(Path.home()),
+            initial_directory,
         )
         if directory:
             self.controller.load_dicom_directory(directory)
