@@ -1,5 +1,6 @@
 import vtk
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
 from ..imaging.models import MedicalVolume
@@ -7,23 +8,60 @@ from ..imaging.presets import configure_volume_property
 
 
 class Volume3DPanel(QFrame):
-    """Interactive VTK 3D medical-volume view."""
+    """Interactive VTK 3D view with camera and maximize controls."""
+
+    maximize_requested = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ViewerFrame")
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(6, 4, 6, 4)
-        outer.setSpacing(3)
+        outer.setContentsMargins(9, 7, 9, 8)
+        outer.setSpacing(5)
 
+        header = QHBoxLayout()
+        icon = QLabel("◇")
+        icon.setObjectName("ViewerIcon")
         title = QLabel("3D View")
         title.setObjectName("ViewerTitle")
-        outer.addWidget(title)
+        self.maximize_button = QPushButton("⛶")
+        self.maximize_button.setObjectName("ViewerToolButton")
+        self.maximize_button.setToolTip("Maximize 3D view")
+        self.maximize_button.clicked.connect(lambda: self.maximize_requested.emit(self))
+        header.addWidget(icon)
+        header.addWidget(title)
+        header.addStretch(1)
+        header.addWidget(self.maximize_button)
+        outer.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(8)
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
-        self.vtk_widget.setMinimumSize(180, 180)
-        outer.addWidget(self.vtk_widget, 1)
+        self.vtk_widget.setMinimumSize(180, 170)
+        body.addWidget(self.vtk_widget, 1)
+
+        tools = QVBoxLayout()
+        tools.setSpacing(6)
+        for text, tooltip, callback in (
+            ("+", "Zoom in", lambda: self.zoom(1.2)),
+            ("−", "Zoom out", lambda: self.zoom(0.8)),
+            ("↻", "Reset camera", self.reset_camera),
+        ):
+            button = QPushButton(text)
+            button.setObjectName("ViewerToolButton")
+            button.setToolTip(tooltip)
+            button.clicked.connect(callback)
+            tools.addWidget(button)
+        tools.addStretch(1)
+        body.addLayout(tools)
+        outer.addLayout(body, 1)
+
+        hint = QLabel("Drag to rotate   •   Wheel to zoom")
+        hint.setObjectName("ViewerMeta")
+        outer.addWidget(hint)
 
         self.renderer = vtk.vtkRenderer()
         self.renderer.SetBackground(0.035, 0.04, 0.045)
@@ -55,6 +93,14 @@ class Volume3DPanel(QFrame):
         scalar_min, scalar_max = volume.scalar_range
         configure_volume_property(self.volume_property, scalar_min, scalar_max)
         self.reset_camera()
+
+    def set_maximized_state(self, maximized: bool) -> None:
+        self.maximize_button.setText("↙" if maximized else "⛶")
+        self.maximize_button.setToolTip("Restore all views" if maximized else "Maximize 3D view")
+
+    def zoom(self, factor: float) -> None:
+        self.renderer.GetActiveCamera().Zoom(factor)
+        self.vtk_widget.GetRenderWindow().Render()
 
     def reset_camera(self) -> None:
         self.renderer.ResetCamera()

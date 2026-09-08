@@ -8,10 +8,9 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QSlider,
     QVBoxLayout,
-    QWidget,
 )
 
-from .status_indicator import StatusIndicator
+from .status_indicator import StatusIndicator, StatusState
 
 
 class SetupLeftSidebar(QFrame):
@@ -28,21 +27,22 @@ class SetupLeftSidebar(QFrame):
         self._window = 1800
         self._level = 500
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 18, 16, 14)
-        layout.setSpacing(10)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 10, 7, 10)
+        root.setSpacing(10)
 
-        self.import_button = QPushButton("IMPORT DICOM")
+        image_card, image_layout = self._card("▣   IMAGE DATA")
+        self.import_button = QPushButton("▰    IMPORT DICOM")
         self.import_button.setObjectName("PrimaryAction")
-        self.load_button = QPushButton("LOAD VOLUME")
-        self.load_button.setObjectName("PrimaryAction")
-        layout.addWidget(self.import_button)
-        layout.addWidget(self.load_button)
-        layout.addSpacing(2)
+        self.load_button = QPushButton("●    LOAD VOLUME")
+        self.load_button.setObjectName("SecondaryAction")
+        image_layout.addWidget(self.import_button)
+        image_layout.addWidget(self.load_button)
+        root.addWidget(image_card)
 
-        layout.addWidget(self._section("CT DISPLAY"))
-
+        display_card, display = self._card("▤   CT DISPLAY")
         preset_row = QHBoxLayout()
+        preset_row.setSpacing(10)
         preset_label = QLabel("Preset")
         preset_label.setObjectName("SidebarText")
         self.preset = QComboBox()
@@ -50,59 +50,61 @@ class SetupLeftSidebar(QFrame):
         self.preset.setCurrentText("Spine Bone")
         preset_row.addWidget(preset_label)
         preset_row.addWidget(self.preset, 1)
-        layout.addLayout(preset_row)
+        display.addLayout(preset_row)
 
         self.window_value = QLabel("1800")
-        self.window_value.setAlignment(Qt.AlignCenter)
-        self.window_value.setObjectName("SidebarText")
-        layout.addWidget(self.window_value)
+        display.addLayout(self._value_row("Window (HU)", self.window_value))
         self.window_slider = QSlider(Qt.Horizontal)
         self.window_slider.setRange(200, 4000)
         self.window_slider.setValue(1800)
-        layout.addWidget(self.window_slider)
-        window_name = QLabel("Window")
-        window_name.setAlignment(Qt.AlignRight)
-        window_name.setObjectName("SidebarText")
-        layout.addWidget(window_name)
+        display.addWidget(self.window_slider)
+        display.addLayout(self._range_row("200", "4000"))
 
         self.level_value = QLabel("500")
-        self.level_value.setAlignment(Qt.AlignCenter)
-        self.level_value.setObjectName("SidebarText")
-        layout.addWidget(self.level_value)
+        display.addLayout(self._value_row("Level (HU)", self.level_value))
         self.level_slider = QSlider(Qt.Horizontal)
         self.level_slider.setRange(-1000, 2000)
         self.level_slider.setValue(500)
-        layout.addWidget(self.level_slider)
-        level_name = QLabel("Level")
-        level_name.setAlignment(Qt.AlignRight)
-        level_name.setObjectName("SidebarText")
-        layout.addWidget(level_name)
+        display.addWidget(self.level_slider)
+        display.addLayout(self._range_row("-1000", "2000"))
 
-        layout.addSpacing(10)
         interpolation = QLabel("Interpolation")
-        interpolation.setObjectName("SectionTitle")
-        layout.addWidget(interpolation)
+        interpolation.setObjectName("SidebarText")
+        display.addWidget(interpolation)
+        interpolation_row = QHBoxLayout()
         self.linear = QRadioButton("Linear")
         self.nearest = QRadioButton("Nearest")
         self.linear.setChecked(True)
-        layout.addWidget(self.linear)
-        layout.addWidget(self.nearest)
+        interpolation_row.addWidget(self.linear)
+        interpolation_row.addStretch(1)
+        interpolation_row.addWidget(self.nearest)
+        display.addLayout(interpolation_row)
+        root.addWidget(display_card)
 
-        layout.addStretch(1)
+        status_card, status = self._card("⌁   TRACKING & ROBOT")
+        manipulator = QLabel("Manipulator")
+        manipulator.setObjectName("StatusGroup")
+        status.addWidget(manipulator)
+        self.robot_arm_status = self._compact_status("Robot arm")
+        self.end_effector_status = self._compact_status("End-effector")
+        status.addWidget(self.robot_arm_status)
+        status.addWidget(self.end_effector_status)
 
-        layout.addWidget(self._section("Manipulator"))
-        self.robot_arm_status = StatusIndicator("Robot arm")
-        self.end_effector_status = StatusIndicator("End-effector")
-        layout.addWidget(self.robot_arm_status)
-        layout.addWidget(self.end_effector_status)
-        layout.addWidget(self._section("Tracking"))
-        self.tool_status = StatusIndicator("Tool marker")
-        self.robot_marker_status = StatusIndicator("Robot marker")
-        self.patient_marker_status = StatusIndicator("Patient marker")
-        layout.addWidget(self.tool_status)
-        layout.addWidget(self.robot_marker_status)
-        layout.addWidget(self.patient_marker_status)
-        layout.addSpacing(6)
+        divider = QFrame()
+        divider.setObjectName("CardDivider")
+        status.addWidget(divider)
+
+        tracking = QLabel("Tracking")
+        tracking.setObjectName("StatusGroup")
+        status.addWidget(tracking)
+        self.tool_status = self._compact_status("Tool marker")
+        self.robot_marker_status = self._compact_status("Robot marker")
+        self.patient_marker_status = self._compact_status("Patient marker")
+        status.addWidget(self.tool_status)
+        status.addWidget(self.robot_marker_status)
+        status.addWidget(self.patient_marker_status)
+        root.addWidget(status_card)
+        root.addStretch(1)
 
         self.import_button.clicked.connect(self.import_dicom_requested)
         self.load_button.clicked.connect(self.load_volume_requested)
@@ -111,18 +113,50 @@ class SetupLeftSidebar(QFrame):
         self.preset.currentTextChanged.connect(self._apply_preset)
         self.linear.toggled.connect(self.interpolation_changed)
 
-    def _section(self, title: str) -> QWidget:
-        widget = QWidget()
-        box = QVBoxLayout(widget)
-        box.setContentsMargins(0, 0, 0, 0)
-        box.setSpacing(4)
-        label = QLabel(title)
-        label.setObjectName("SectionTitle")
-        line = QFrame()
-        line.setObjectName("SectionLine")
-        box.addWidget(label)
-        box.addWidget(line)
-        return widget
+    @staticmethod
+    def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("SidebarCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(7)
+        header = QLabel(title)
+        header.setObjectName("CardTitle")
+        layout.addWidget(header)
+        divider = QFrame()
+        divider.setObjectName("CardDivider")
+        layout.addWidget(divider)
+        return card, layout
+
+    @staticmethod
+    def _value_row(name: str, value: QLabel) -> QHBoxLayout:
+        row = QHBoxLayout()
+        label = QLabel(name)
+        label.setObjectName("SidebarText")
+        value.setObjectName("SidebarValue")
+        value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        row.addWidget(label)
+        row.addStretch(1)
+        row.addWidget(value)
+        return row
+
+    @staticmethod
+    def _range_row(minimum: str, maximum: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        low = QLabel(minimum)
+        high = QLabel(maximum)
+        low.setObjectName("RangeText")
+        high.setObjectName("RangeText")
+        row.addWidget(low)
+        row.addStretch(1)
+        row.addWidget(high)
+        return row
+
+    @staticmethod
+    def _compact_status(name: str) -> StatusIndicator:
+        indicator = StatusIndicator(name)
+        indicator.set_status(StatusState.WAITING)
+        return indicator
 
     def _emit_window_level(self) -> None:
         self._window = self.window_slider.value()

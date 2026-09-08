@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QStatusBar
+from PySide6.QtWidgets import QMainWindow
 
 from .pages.imaging_page import ImagingPage
 from .pages.placeholder_page import PlaceholderPage
@@ -11,26 +11,21 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BART Spine")
-        self.resize(1440, 900)
-        self.setMinimumSize(1180, 720)
+        self.resize(1680, 940)
+        self.setMinimumSize(1280, 760)
 
         self.procedure_shell = ProcedureShell()
         self.setCentralWidget(self.procedure_shell)
 
-        self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("BART Spine — Setup")
-
         self._register_workflows()
-        self.procedure_shell.stage_changed.connect(
-            lambda key: self.statusBar().showMessage(f"BART Spine — {key.title()}")
-        )
 
     def _register_workflows(self) -> None:
         setup = ImagingPage()
-        setup.status_changed.connect(self.statusBar().showMessage)
-        # PLACEHOLDER: Replace these pages as each workflow is implemented.
+        setup.dataset_changed.connect(self.procedure_shell.set_dataset_status)
+        setup.readiness_changed.connect(self.procedure_shell.set_system_status)
         self.procedure_shell.add_workflow(setup)
 
+        # PLACEHOLDER: Replace these pages as each workflow is implemented.
         self.procedure_shell.add_workflow(
             PlaceholderPage("planning", "Planning", "Planning workflow — next development stage")
         )

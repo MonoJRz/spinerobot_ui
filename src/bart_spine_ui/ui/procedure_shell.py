@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QDateTime, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -15,7 +15,7 @@ from ..workflows import WorkflowPage
 
 
 class ProcedureShell(QWidget):
-    """Top-stage workflow shell matching the surgical procedure sequence."""
+    """Procedure shell with workflow navigation and persistent system context."""
 
     stage_changed = Signal(str)
 
@@ -31,32 +31,89 @@ class ProcedureShell(QWidget):
 
         self.top_bar = QFrame()
         self.top_bar.setObjectName("TopBar")
-        self.top_bar.setFixedHeight(56)
+        self.top_bar.setFixedHeight(78)
         top = QHBoxLayout(self.top_bar)
-        top.setContentsMargins(14, 4, 18, 4)
-        top.setSpacing(12)
+        top.setContentsMargins(20, 8, 20, 8)
+        top.setSpacing(16)
 
-        # PLACEHOLDER: Replace this BART LAB wordmark with the official PNG logo asset.
+        # PLACEHOLDER: Replace this wordmark with the official BART LAB PNG logo.
         brand = QVBoxLayout()
         brand.setSpacing(0)
         title = QLabel("BART LAB")
         title.setObjectName("BrandTitle")
-        subtitle = QLabel("Center for Biomedical and Robotics Technology")
+        subtitle = QLabel("Precision for a Healthier Tomorrow")
         subtitle.setObjectName("BrandSubtitle")
         brand.addWidget(title)
         brand.addWidget(subtitle)
         top.addLayout(brand)
-        top.addStretch(1)
+        top.addSpacing(28)
 
         self.stage_row = QHBoxLayout()
-        self.stage_row.setSpacing(12)
-        top.addLayout(self.stage_row)
-        top.addStretch(1)
+        self.stage_row.setSpacing(0)
+        top.addLayout(self.stage_row, 1)
+
+        # PLACEHOLDER: Connect settings and help buttons when those dialogs exist.
+        for symbol, tooltip in (("⚙", "Settings"), ("?", "Help")):
+            button = QPushButton(symbol)
+            button.setObjectName("UtilityButton")
+            button.setToolTip(tooltip)
+            top.addWidget(button)
+
+        time_divider = QFrame()
+        time_divider.setObjectName("HeaderDivider")
+        top.addWidget(time_divider)
+
+        clock = QVBoxLayout()
+        clock.setSpacing(1)
+        self.date_label = QLabel()
+        self.date_label.setObjectName("HeaderMeta")
+        self.time_label = QLabel()
+        self.time_label.setObjectName("HeaderTime")
+        clock.addWidget(self.date_label)
+        clock.addWidget(self.time_label)
+        top.addLayout(clock)
+
+        room_divider = QFrame()
+        room_divider.setObjectName("HeaderDivider")
+        top.addWidget(room_divider)
+
+        # PLACEHOLDER: Replace with the operating-room context service.
+        room = QLabel("OR-1")
+        room.setObjectName("RoomLabel")
+        top.addWidget(room)
 
         root.addWidget(self.top_bar)
 
         self.stack = QStackedWidget()
         root.addWidget(self.stack, 1)
+
+        footer = QFrame()
+        footer.setObjectName("FooterBar")
+        footer.setFixedHeight(42)
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(18, 0, 18, 0)
+        footer_layout.setSpacing(14)
+
+        self.system_status = QLabel("●  Waiting for system status")
+        self.system_status.setObjectName("FooterWaiting")
+        footer_layout.addWidget(self.system_status)
+        footer_layout.addStretch(1)
+
+        # PLACEHOLDER: Replace version text with package/release metadata.
+        product = QLabel("Spinal Surgical Robot    |    Version 0.1.0")
+        product.setObjectName("FooterMeta")
+        footer_layout.addWidget(product)
+        footer_layout.addStretch(1)
+
+        self.dataset_status = QLabel("▣  Waiting for clinical CT")
+        self.dataset_status.setObjectName("FooterMeta")
+        footer_layout.addWidget(self.dataset_status)
+        root.addWidget(footer)
+
+        self._clock_timer = QTimer(self)
+        self._clock_timer.timeout.connect(self._update_clock)
+        self._clock_timer.start(1000)
+        self._update_clock()
 
     def add_workflow(self, page: WorkflowPage) -> None:
         key = page.workflow_key
@@ -66,7 +123,8 @@ class ProcedureShell(QWidget):
         self._pages[key] = page
         self.stack.addWidget(page)
 
-        button = QPushButton(page.workflow_title)
+        step = len(self._pages)
+        button = QPushButton(f"{step}    {page.workflow_title}")
         button.setObjectName("StageButton")
         button.setCheckable(True)
         button.clicked.connect(lambda _checked=False, k=key: self.activate(k))
@@ -88,3 +146,22 @@ class ProcedureShell(QWidget):
 
         page.on_activated()
         self.stage_changed.emit(key)
+
+    def set_system_status(self, text: str, state: str = "waiting") -> None:
+        object_names = {
+            "waiting": "FooterWaiting",
+            "ready": "FooterReady",
+            "warning": "FooterWarning",
+        }
+        self.system_status.setText(f"●  {text}")
+        self.system_status.setObjectName(object_names.get(state, "FooterWaiting"))
+        self.system_status.style().unpolish(self.system_status)
+        self.system_status.style().polish(self.system_status)
+
+    def set_dataset_status(self, text: str) -> None:
+        self.dataset_status.setText(f"▣  {text}")
+
+    def _update_clock(self) -> None:
+        now = QDateTime.currentDateTime()
+        self.date_label.setText(now.toString("ddd, MMM d, yyyy"))
+        self.time_label.setText(now.toString("h:mm AP"))

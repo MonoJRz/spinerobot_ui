@@ -1,6 +1,6 @@
 import vtk
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, QVBoxLayout
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
 from ..core import SliceOrientation
@@ -9,7 +9,9 @@ from ..imaging.presets import default_window_level
 
 
 class MPRPanel(QFrame):
-    """Orthogonal MPR panel with direct, real-time VTK slice scrolling."""
+    """Orthogonal MPR panel with slice, window/level, and maximize controls."""
+
+    maximize_requested = Signal(object)
 
     def __init__(self, title: str, orientation: SliceOrientation, parent=None):
         super().__init__(parent)
@@ -21,20 +23,30 @@ class MPRPanel(QFrame):
         self.extent = None
         self.spacing = None
         self.origin = None
+        self._window = 1800.0
+        self._level = 500.0
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(6, 4, 6, 4)
-        outer.setSpacing(3)
+        outer.setContentsMargins(9, 7, 9, 8)
+        outer.setSpacing(5)
 
         header = QHBoxLayout()
+        view_icon = QLabel("▧")
+        view_icon.setObjectName("ViewerIcon")
         title_label = QLabel(title)
         title_label.setObjectName("ViewerTitle")
-        self.position_label = QLabel("")
-        self.position_label.setObjectName("StatusMuted")
+        self.position_label = QLabel("Waiting for volume")
+        self.position_label.setObjectName("ViewerMeta")
         self.position_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.maximize_button = QPushButton("⛶")
+        self.maximize_button.setObjectName("ViewerToolButton")
+        self.maximize_button.setToolTip(f"Maximize {title} view")
+        self.maximize_button.clicked.connect(lambda: self.maximize_requested.emit(self))
+        header.addWidget(view_icon)
         header.addWidget(title_label)
         header.addStretch(1)
         header.addWidget(self.position_label)
+        header.addWidget(self.maximize_button)
         outer.addLayout(header)
 
         body = QHBoxLayout()
@@ -42,7 +54,7 @@ class MPRPanel(QFrame):
         body.setSpacing(8)
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
-        self.vtk_widget.setMinimumSize(180, 180)
+        self.vtk_widget.setMinimumSize(180, 170)
         body.addWidget(self.vtk_widget, 1)
 
         slider_frame = QFrame()
@@ -59,6 +71,13 @@ class MPRPanel(QFrame):
         slider_box.addWidget(self.slider, 1)
         body.addWidget(slider_frame)
         outer.addLayout(body, 1)
+
+        footer = QHBoxLayout()
+        self.window_level_label = QLabel("W: 1800    L: 500")
+        self.window_level_label.setObjectName("ViewerMeta")
+        footer.addWidget(self.window_level_label)
+        footer.addStretch(1)
+        outer.addLayout(footer)
 
         self.renderer = vtk.vtkRenderer()
         self.renderer.SetBackground(0.035, 0.04, 0.045)
@@ -92,8 +111,7 @@ class MPRPanel(QFrame):
         scalar_min, scalar_max = volume.scalar_range
         window, level = default_window_level(scalar_min, scalar_max)
         self.reslice.SetInputData(image)
-        self.window_level.SetWindow(window)
-        self.window_level.SetLevel(level)
+        self.set_window_level(window, level)
 
         if not self._actor_added:
             self.renderer.AddActor(self.actor)
@@ -112,8 +130,11 @@ class MPRPanel(QFrame):
         self.render()
 
     def set_window_level(self, window: float, level: float) -> None:
-        self.window_level.SetWindow(float(window))
-        self.window_level.SetLevel(float(level))
+        self._window = float(window)
+        self._level = float(level)
+        self.window_level.SetWindow(self._window)
+        self.window_level.SetLevel(self._level)
+        self.window_level_label.setText(f"W: {self._window:.0f}    L: {self._level:.0f}")
         self.render()
 
     def set_linear_interpolation(self, enabled: bool) -> None:
@@ -123,6 +144,11 @@ class MPRPanel(QFrame):
             self.reslice.SetInterpolationModeToNearestNeighbor()
         self.reslice.Update()
         self.render()
+
+    def set_maximized_state(self, maximized: bool) -> None:
+        self.maximize_button.setText("↙" if maximized else "⛶")
+        action = "Restore all views" if maximized else f"Maximize {self.title} view"
+        self.maximize_button.setToolTip(action)
 
     def render(self) -> None:
         self.vtk_widget.GetRenderWindow().Render()
@@ -139,6 +165,10 @@ class MPRPanel(QFrame):
             return
         self._update_reslice(value)
         self.render()
+
+    def _update_position_label(self, index: int, axis: str) -> None:
+        minimum, maximum = self._slice_index_range()
+        self.position_label.setText(f"{axis}: {index - minimum + 1} / {maximum - minimum + 1}")
 
     def _update_reslice(self, index: int) -> None:
         xmin, xmax, ymin, ymax, zmin, zmax = self.extent
@@ -170,7 +200,7 @@ class MPRPanel(QFrame):
                 0.0,
             )
             self.reslice.SetOutputExtent(0, x_count - 1, 0, y_count - 1, 0, 0)
-            self.position_label.setText(f"S {position:.1f} mm")
+            self._update_position_label(index, "Z")
 
         elif self.orientation is SliceOrientation.CORONAL:
             position = oy + index * sy
@@ -187,7 +217,7 @@ class MPRPanel(QFrame):
                 0.0,
             )
             self.reslice.SetOutputExtent(0, x_count - 1, 0, z_count - 1, 0, 0)
-            self.position_label.setText(f"P {position:.1f} mm")
+            self._update_position_label(index, "Y")
 
         else:
             position = ox + index * sx
@@ -204,7 +234,7 @@ class MPRPanel(QFrame):
                 0.0,
             )
             self.reslice.SetOutputExtent(0, y_count - 1, 0, z_count - 1, 0, 0)
-            self.position_label.setText(f"L {position:.1f} mm")
+            self._update_position_label(index, "X")
 
         self.reslice.SetResliceAxes(axes)
         self.reslice.Update()
