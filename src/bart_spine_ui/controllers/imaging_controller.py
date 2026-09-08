@@ -6,18 +6,13 @@ from ..imaging import ImagingService, MedicalVolume
 
 
 class ImagingController(QObject):
-    """
-    Controller boundary between Qt pages and medical-image services.
-
-    Later, long operations such as DICOM indexing, TotalSegmentator, or registration should be
-    moved behind this controller and executed in worker threads/processes.
-    """
+    """Controller boundary between Qt pages and medical-image services."""
 
     volume_loaded = Signal(object)
     error_occurred = Signal(str)
     status_changed = Signal(str)
 
-    def __init__(self, *, service: ImagingService | None = None, parent=None,):
+    def __init__(self, *, service: ImagingService | None = None, parent=None):
         super().__init__(parent)
         self.service = service or ImagingService()
         self.current_volume: MedicalVolume | None = None

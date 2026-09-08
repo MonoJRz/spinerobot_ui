@@ -25,12 +25,13 @@ class ImagingService:
 
     def create_demo(self) -> MedicalVolume:
         image, name = create_demo_volume()
-        return self._make_volume(image, name)
+        return self._make_volume(image, name, is_demo=True)
 
     @staticmethod
-    def _make_volume(image, name: str) -> MedicalVolume:
+    def _make_volume(image, name: str, *, is_demo: bool = False) -> MedicalVolume:
         return MedicalVolume(
             name=name,
             sitk_image=image,
             vtk_image=sitk_to_vtk(image),
+            is_demo=is_demo,
         )

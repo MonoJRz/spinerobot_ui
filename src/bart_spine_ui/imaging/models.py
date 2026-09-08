@@ -16,6 +16,7 @@ class MedicalVolume:
     name: str
     sitk_image: sitk.Image
     vtk_image: vtk.vtkImageData
+    is_demo: bool = False
 
     @property
     def size(self) -> tuple[int, int, int]:

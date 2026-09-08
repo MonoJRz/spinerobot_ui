@@ -1,71 +1,54 @@
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-)
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox
 
 from ...controllers import ImagingController
 from ...imaging.models import MedicalVolume
 from ...visualization import ImagingWorkspace
 from ...workflows import WorkflowPage
+from ..setup_left_sidebar import SetupLeftSidebar
+from ..setup_right_sidebar import SetupRightSidebar
 
 
 class ImagingPage(WorkflowPage):
-    """Current standalone CT/MPR workspace."""
+    """Setup stage: image import, CT display, system readiness, and four-view verification."""
 
     def __init__(self, controller: ImagingController | None = None, parent=None):
         super().__init__(parent)
 
         self.controller = controller or ImagingController(parent=self)
 
-        main = QVBoxLayout(self)
+        main = QHBoxLayout(self)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
 
-        toolbar = QHBoxLayout()
-
-        self.load_file_button = QPushButton("Load CT / Volume File")
-        self.load_dicom_button = QPushButton("Load DICOM Folder")
-        self.demo_button = QPushButton("Load Demo Phantom")
-        self.reset_3d_button = QPushButton("Reset 3D Camera")
-
-        self.dataset_label = QLabel("No image loaded")
-        self.dataset_label.setStyleSheet("font-weight: 600;")
-
-        toolbar.addWidget(self.load_file_button)
-        toolbar.addWidget(self.load_dicom_button)
-        toolbar.addWidget(self.demo_button)
-        toolbar.addWidget(self.reset_3d_button)
-        toolbar.addStretch(1)
-        toolbar.addWidget(self.dataset_label)
-
-        main.addLayout(toolbar)
-
+        self.left_sidebar = SetupLeftSidebar()
         self.workspace = ImagingWorkspace()
-        main.addWidget(self.workspace, 1)
+        self.right_sidebar = SetupRightSidebar()
 
-        self.load_file_button.clicked.connect(self._choose_file)
-        self.load_dicom_button.clicked.connect(self._choose_dicom_directory)
-        self.demo_button.clicked.connect(self.controller.load_demo)
-        self.reset_3d_button.clicked.connect(self.workspace.reset_3d_camera)
+        main.addWidget(self.left_sidebar)
+        main.addWidget(self.workspace, 1)
+        main.addWidget(self.right_sidebar)
+
+        self.left_sidebar.import_dicom_requested.connect(self._choose_dicom_directory)
+        self.left_sidebar.load_volume_requested.connect(self._choose_file)
+        self.left_sidebar.window_level_changed.connect(self.workspace.set_window_level)
+        self.left_sidebar.interpolation_changed.connect(self.workspace.set_linear_interpolation)
 
         self.controller.volume_loaded.connect(self._on_volume_loaded)
         self.controller.error_occurred.connect(self._on_error)
         self.controller.status_changed.connect(self.status_changed)
 
-        # Preserve the successful prototype behavior: always start with known test data.
+        # PLACEHOLDER: Start with synthetic data until a clinical CT is selected.
         self.controller.load_demo()
 
     @property
     def workflow_key(self) -> str:
-        return "imaging"
+        return "setup"
 
     @property
     def workflow_title(self) -> str:
-        return "Imaging"
+        return "Setup"
 
     def _choose_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -91,7 +74,30 @@ class ImagingPage(WorkflowPage):
 
     def _on_volume_loaded(self, volume: MedicalVolume) -> None:
         self.workspace.set_volume(volume)
-        self.dataset_label.setText(volume.name)
+        self.left_sidebar._emit_window_level()
+        self.right_sidebar.set_ct_loaded(volume.name, is_demo=volume.is_demo)
+
+    # These entry points are ready for real robot/tracking controller signals.
+    def set_robot_connected(self, connected: bool | None) -> None:
+        self.left_sidebar.set_robot_arm_connected(connected)
+        self.right_sidebar.set_robot_connected(connected)
+
+    def set_end_effector_connected(self, connected: bool | None) -> None:
+        self.left_sidebar.set_end_effector_connected(connected)
+
+    def set_tracking_connected(self, connected: bool | None) -> None:
+        self.right_sidebar.set_tracking_connected(connected)
+
+    def set_tool_marker_tracked(self, tracked: bool | None) -> None:
+        self.left_sidebar.set_tool_marker_tracked(tracked)
+
+    def set_robot_marker_tracked(self, tracked: bool | None) -> None:
+        self.left_sidebar.set_robot_marker_tracked(tracked)
+
+    def set_patient_marker_tracked(self, tracked: bool | None) -> None:
+        self.left_sidebar.set_patient_marker_tracked(tracked)
+        self.right_sidebar.set_patient_marker_tracked(tracked)
 
     def _on_error(self, message: str) -> None:
+        self.right_sidebar.add_log(f"Imaging error: {message}")
         QMessageBox.critical(self, "Imaging error", message)
