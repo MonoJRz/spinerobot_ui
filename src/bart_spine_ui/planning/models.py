@@ -8,6 +8,11 @@ import numpy as np
 
 Side = Literal["left", "right"]
 
+# Simplified tulip geometry shared by screw rendering and rod-seat placement.
+HEAD_DIAMETER_MM = 13.0
+HEAD_HEIGHT_MM = 15.0
+TULIP_SLOT_WIDTH_MM = 6.0
+
 
 @dataclass(slots=True)
 class ScrewPlan:

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...planning.collision import ScrewCollision, collisions_for_key, find_screw_collisions
-from ...planning.models import ScrewPlan, Side
+from ...planning.models import Side
 from ...planning.rod import (
     FIT_CAUTION_MM,
     FIT_WARNING_MM,
@@ -253,25 +253,15 @@ class _RodCard(QFrame):
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(6)
-        self.length = self._metric(grid, 0, "Length")
-        self.max_gap = self._metric(grid, 1, "Max seating residual")
-        self.mean_gap = self._metric(grid, 2, "Mean seating residual")
-        self.worst = self._metric(grid, 3, "Worst residual")
-        self.contour_offset = self._metric(grid, 4, "Max contour offset")
-        self.sagittal = self._metric(grid, 5, "Sagittal bend")
-        self.coronal = self._metric(grid, 6, "Coronal bend")
-        self.radius = self._metric(grid, 7, "Min bend radius")
+        self.length = self._metric(grid, 0, "Selected length")
+        self.max_gap = self._metric(grid, 1, "Max tulip reduction")
+        self.radius = self._metric(grid, 2, "Min bend radius")
         layout.addLayout(grid)
 
         self.status = QLabel("NO ROD")
         self.status.setObjectName("RodStatus")
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.status)
-
-        self.gaps = QLabel("")
-        self.gaps.setObjectName("RodGapDetail")
-        self.gaps.setWordWrap(True)
-        layout.addWidget(self.gaps)
 
         self.warning = QLabel("")
         self.warning.setObjectName("RodWarning")
@@ -296,28 +286,17 @@ class _RodCard(QFrame):
             for label in (
                 self.length,
                 self.max_gap,
-                self.mean_gap,
-                self.worst,
-                self.contour_offset,
-                self.sagittal,
-                self.coronal,
                 self.radius,
             ):
                 label.setText("—")
             self.status.setText("NO ROD")
             self.status.setStyleSheet("color:#8ea9ba; border-color:#345063;")
-            self.gaps.clear()
             self.warning.hide()
             return
 
         self.spec.setText(f"{plan.material}  ·  Ø{plan.diameter_mm:.1f} mm")
-        self.length.setText(f"{plan.length_mm:.1f} mm")
+        self.length.setText(f"{plan.length_mm:.0f} mm")
         self.max_gap.setText(f"{plan.max_seat_gap_mm:.1f} mm")
-        self.mean_gap.setText(f"{plan.mean_seat_gap_mm:.1f} mm")
-        self.worst.setText(plan.worst_level or "—")
-        self.contour_offset.setText(f"{plan.max_straight_rod_offset_mm:.1f} mm")
-        self.sagittal.setText(f"{plan.sagittal_bend_deg:.1f}°")
-        self.coronal.setText(f"{plan.coronal_bend_deg:.1f}°")
         self.radius.setText(
             f"{plan.minimum_bend_radius_mm:.0f} mm"
             if plan.minimum_bend_radius_mm is not None
@@ -331,8 +310,6 @@ class _RodCard(QFrame):
         else:
             self.status.setStyleSheet("color:#7ee787; border-color:#39704a; background:#173326;")
 
-        gap_rows = [f"{level}  {plan.seat_gap_mm[level]:.1f} mm" for level in plan.levels]
-        self.gaps.setText("Rod-seat residual\n" + "   ·   ".join(gap_rows))
         if plan.warning:
             self.warning.setText("▲  " + plan.warning)
             self.warning.show()
@@ -424,7 +401,6 @@ class PlanningPage(BasePlanningPage):
                 continue
             entry = np.asarray(plan.entry_point, dtype=float)
             endpoint = np.asarray(plan.endpoint, dtype=float)
-            direction = np.asarray(plan.direction, dtype=float)
             body = self.workspace._cylinder_actor(
                 entry,
                 endpoint,
@@ -432,17 +408,15 @@ class PlanningPage(BasePlanningPage):
                 color=(0.95, 0.25, 0.30),
                 opacity=0.82,
             )
-            head_length = max(3.0, plan.diameter_mm * 0.8)
-            head = self.workspace._cylinder_actor(
-                entry - direction * head_length,
-                entry,
-                radius=max(2.5, plan.diameter_mm * 0.85),
+            tulip_actors = self.workspace._tulip_actors(
+                plan,
                 color=(1.0, 0.34, 0.25),
                 opacity=0.90,
             )
             renderer.AddActor(body)
-            renderer.AddActor(head)
-            self.workspace._three_d_actors.extend((body, head))
+            for actor in tulip_actors:
+                renderer.AddActor(actor)
+            self.workspace._three_d_actors.extend((body, *tulip_actors))
         renderer.ResetCameraClippingRange()
         self.workspace.three_d.vtk_widget.GetRenderWindow().Render()
 
@@ -607,10 +581,15 @@ class PlanningPage(BasePlanningPage):
             ),
         )
         ordered_plans = [plan for _key, plan in ordered_items]
+        tulip_slot_directions = {
+            (level, side): direction
+            for side, rod in self._rod_plans.items()
+            if rod is not None
+            for level, direction in rod.tulip_slot_directions_lps.items()
+        }
         for key, plan in ordered_items:
             entry = np.asarray(plan.entry_point, dtype=float)
             endpoint = np.asarray(plan.endpoint, dtype=float)
-            direction = np.asarray(plan.direction, dtype=float)
             body = self.workspace._cylinder_actor(
                 entry,
                 endpoint,
@@ -618,18 +597,16 @@ class PlanningPage(BasePlanningPage):
                 color=(0.95, 0.30, 0.34) if key in collision_keys else (0.64, 0.78, 0.86),
                 opacity=1.0,
             )
-            head_length = max(3.0, plan.diameter_mm * 0.8)
-            head_end = entry - direction * head_length
-            head = self.workspace._cylinder_actor(
-                head_end,
-                entry,
-                radius=max(2.5, plan.diameter_mm * 0.85),
+            tulip_actors = self.workspace._tulip_actors(
+                plan,
                 color=(1.00, 0.36, 0.25) if key in collision_keys else (0.95, 0.66, 0.20),
                 opacity=1.0,
+                slot_direction=tulip_slot_directions.get(key),
             )
             renderer.AddActor(body)
-            renderer.AddActor(head)
-            screw_actors.extend((body, head))
+            for actor in tulip_actors:
+                renderer.AddActor(actor)
+            screw_actors.extend((body, *tulip_actors))
 
         rod_actors: list[vtk.vtkProp] = []
         rod_colors = {
