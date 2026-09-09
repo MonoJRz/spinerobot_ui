@@ -18,7 +18,6 @@ class MainWindow(QMainWindow):
 
         self.procedure_shell = ProcedureShell()
         self.setCentralWidget(self.procedure_shell)
-
         self._register_workflows()
 
     def _register_workflows(self) -> None:
@@ -33,10 +32,24 @@ class MainWindow(QMainWindow):
         planning = PlanningPage(controller=self.imaging_controller)
         self.procedure_shell.add_workflow(planning)
 
+        # Planning consumes the Region already shown in CASE INFORMATION.
+        planning.set_case_region(setup.right_sidebar.case_values["Region"].text())
+        setup.right_sidebar.case_changed.connect(
+            lambda _case_id, _modality, _anatomy, region, _patient: planning.set_case_region(region)
+        )
+
         # PLACEHOLDER: Replace these pages as each workflow is implemented.
         self.procedure_shell.add_workflow(
-            PlaceholderPage("calibration", "Calibration", "Calibration workflow — next development stage")
+            PlaceholderPage(
+                "calibration",
+                "Calibration",
+                "Calibration workflow — next development stage",
+            )
         )
         self.procedure_shell.add_workflow(
-            PlaceholderPage("navigate", "Navigate", "Navigation workflow — next development stage")
+            PlaceholderPage(
+                "navigate",
+                "Navigate",
+                "Navigation workflow — next development stage",
+            )
         )

@@ -495,4 +495,31 @@ QLabel#FooterReady {
 QLabel#FooterWarning {
     color: #e8bd5d;
 }
+
+QPushButton#AcceptPlanningButton, QPushButton#RejectPlanningButton {
+    min-height: 52px;
+    border-radius: 8px;
+    font-size: 25px;
+    font-weight: 800;
+}
+
+QPushButton#AcceptPlanningButton {
+    background: #123f2b;
+    color: #7ee787;
+    border: 1px solid #2e7b50;
+}
+
+QPushButton#AcceptPlanningButton:hover {
+    background: #1b5a3c;
+}
+
+QPushButton#RejectPlanningButton {
+    background: #462126;
+    color: #ff8b91;
+    border: 1px solid #8f4149;
+}
+
+QPushButton#RejectPlanningButton:hover {
+    background: #672d35;
+}
 """

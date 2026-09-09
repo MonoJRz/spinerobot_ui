@@ -220,6 +220,7 @@ class Volume3DPanel(QFrame):
         self.segmentation_actor.ForceOpaqueOn()
         self.segmentation_actor.SetVisibility(False)
         self.renderer.AddActor(self.segmentation_actor)
+        self._full_segmentation_surface: vtk.vtkPolyData | None = None
 
         self.interactor.Initialize()
 
@@ -235,6 +236,7 @@ class Volume3DPanel(QFrame):
 
     def set_segmentation(self, segmentation: SegmentationVolume) -> None:
         surface = create_smoothed_segmentation_surface(segmentation.vtk_image)
+        self._full_segmentation_surface = surface
         self.segmentation_contour.RemoveAllInputs()
         self.segmentation_contour.AddInputData(surface)
         self.segmentation_contour.Update()
@@ -243,7 +245,61 @@ class Volume3DPanel(QFrame):
         self._set_segmentation_visible(True)
         self.reset_camera()
 
+    def focus_on_segmentation_label(self, label: int, side: str) -> None:
+        """Show one vertebra and frame its selected side from an isometric angle."""
+
+        if self._full_segmentation_surface is None:
+            return
+        threshold = vtk.vtkThreshold()
+        threshold.SetInputData(self._full_segmentation_surface)
+        threshold.SetInputArrayToProcess(
+            0,
+            0,
+            0,
+            vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS,
+            "VertebraLabel",
+        )
+        threshold.SetLowerThreshold(float(label))
+        threshold.SetUpperThreshold(float(label))
+        threshold.SetThresholdFunction(vtk.vtkThreshold.THRESHOLD_BETWEEN)
+        geometry = vtk.vtkGeometryFilter()
+        geometry.SetInputConnection(threshold.GetOutputPort())
+        geometry.Update()
+        focused = vtk.vtkPolyData()
+        focused.ShallowCopy(geometry.GetOutput())
+        if focused.GetNumberOfPoints() == 0:
+            return
+
+        self.segmentation_contour.RemoveAllInputs()
+        self.segmentation_contour.AddInputData(focused)
+        self.segmentation_contour.Update()
+        self.segmentation_actor.GetProperty().SetOpacity(0.62)
+        self.segmentation_actor.ForceOpaqueOff()
+        self.segmentation_actor.SetVisibility(True)
+        self.volume_actor.SetVisibility(False)
+
+        bounds = focused.GetBounds()
+        center = np.array(
+            [
+                (bounds[0] + bounds[1]) / 2.0,
+                (bounds[2] + bounds[3]) / 2.0,
+                (bounds[4] + bounds[5]) / 2.0,
+            ],
+            dtype=float,
+        )
+        view = np.array((1.0 if side == "left" else -1.0, 1.0, 0.65), dtype=float)
+        view /= np.linalg.norm(view)
+        camera = self.renderer.GetActiveCamera()
+        camera.SetFocalPoint(*center)
+        camera.SetPosition(*(center + view))
+        camera.SetViewUp(0.0, 0.0, 1.0)
+        self.renderer.ResetCamera(bounds)
+        camera.Zoom(1.28)
+        self.renderer.ResetCameraClippingRange(bounds)
+        self.vtk_widget.GetRenderWindow().Render()
+
     def clear_segmentation(self) -> None:
+        self._full_segmentation_surface = None
         self.segmentation_contour.RemoveAllInputs()
         self.model_toggle.blockSignals(True)
         self.model_toggle.setChecked(False)
