@@ -11,6 +11,10 @@ from bart_spine_ui.visualization.segmentation_colors import (
     VERTEBRA_LABEL_COUNT,
     create_segmentation_lookup_table,
 )
+from bart_spine_ui.visualization.volume3d import (
+    create_smoothed_segmentation_surface,
+    reset_camera_to_posterior,
+)
 
 
 def _reference_volume(tmp_path):
@@ -78,3 +82,43 @@ def test_segmentation_lookup_table_uses_fixed_muted_palette():
         abs=0.002,
     )
     assert len({table.GetTableValue(label)[:3] for label in range(1, 18)}) == 17
+
+
+def test_smoothed_segmentation_surface_preserves_labels_and_rounds_edges():
+    array = np.zeros((24, 24, 24), dtype=np.uint8)
+    array[5:12, 6:13, 7:14] = 1
+    array[13:20, 6:13, 7:14] = 2
+
+    surface = create_smoothed_segmentation_surface(
+        sitk_to_vtk(sitk.GetImageFromArray(array))
+    )
+
+    assert surface.GetNumberOfCells() > 0
+    scalars = surface.GetPointData().GetScalars()
+    assert scalars.GetName() == "VertebraLabel"
+    assert scalars.GetRange() == (1.0, 2.0)
+    points = np.array(
+        [surface.GetPoint(index) for index in range(surface.GetNumberOfPoints())]
+    )
+    assert np.any(np.abs(points * 2.0 - np.round(points * 2.0)) > 0.01)
+
+
+def test_camera_is_reset_to_posterior_lps_view():
+    cube = vtk.vtkCubeSource()
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputConnection(cube.GetOutputPort())
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+    renderer = vtk.vtkRenderer()
+    renderer.AddActor(actor)
+
+    reset_camera_to_posterior(renderer)
+
+    camera = renderer.GetActiveCamera()
+    position = camera.GetPosition()
+    focal_point = camera.GetFocalPoint()
+    assert position[0] == pytest.approx(focal_point[0])
+    assert position[1] > focal_point[1]
+    assert position[2] == pytest.approx(focal_point[2])
+    assert camera.GetDirectionOfProjection() == pytest.approx((0.0, -1.0, 0.0))
+    assert camera.GetViewUp() == pytest.approx((0.0, 0.0, 1.0))

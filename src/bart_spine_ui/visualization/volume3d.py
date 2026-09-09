@@ -1,12 +1,122 @@
+import math
+
+import numpy as np
 import vtk
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from vtk.util.numpy_support import vtk_to_numpy
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
 from ..imaging.models import MedicalVolume
 from ..imaging.presets import configure_volume_property
 from ..segmentation import SegmentationVolume
 from .segmentation_colors import VERTEBRA_LABEL_COUNT, create_segmentation_lookup_table
+
+SEGMENTATION_GAUSSIAN_SIGMA_VOXELS = 1.5
+SEGMENTATION_GAUSSIAN_RADIUS_FACTOR = 2.0
+
+
+def create_smoothed_segmentation_surface(label_image: vtk.vtkImageData) -> vtk.vtkPolyData:
+    """Extract gently Gaussian-smoothed surfaces without mixing adjacent labels."""
+
+    dimensions = label_image.GetDimensions()
+    labels_zyx = vtk_to_numpy(label_image.GetPointData().GetScalars()).reshape(
+        dimensions[2], dimensions[1], dimensions[0]
+    )
+    padding = math.ceil(
+        SEGMENTATION_GAUSSIAN_SIGMA_VOXELS * SEGMENTATION_GAUSSIAN_RADIUS_FACTOR
+    )
+
+    surfaces = vtk.vtkAppendPolyData()
+    for label in range(1, VERTEBRA_LABEL_COUNT + 1):
+        locations = np.argwhere(labels_zyx == label)
+        if locations.size == 0:
+            continue
+        z_min, y_min, x_min = locations.min(axis=0)
+        z_max, y_max, x_max = locations.max(axis=0)
+
+        extract = vtk.vtkExtractVOI()
+        extract.SetInputData(label_image)
+        extract.SetVOI(
+            max(0, int(x_min) - padding),
+            min(dimensions[0] - 1, int(x_max) + padding),
+            max(0, int(y_min) - padding),
+            min(dimensions[1] - 1, int(y_max) + padding),
+            max(0, int(z_min) - padding),
+            min(dimensions[2] - 1, int(z_max) + padding),
+        )
+
+        binary_mask = vtk.vtkImageThreshold()
+        binary_mask.SetInputConnection(extract.GetOutputPort())
+        binary_mask.ThresholdBetween(label, label)
+        binary_mask.SetInValue(1)
+        binary_mask.SetOutValue(0)
+        binary_mask.SetOutputScalarTypeToUnsignedChar()
+
+        float_mask = vtk.vtkImageCast()
+        float_mask.SetInputConnection(binary_mask.GetOutputPort())
+        float_mask.SetOutputScalarTypeToFloat()
+
+        gaussian = vtk.vtkImageGaussianSmooth()
+        gaussian.SetInputConnection(float_mask.GetOutputPort())
+        gaussian.SetDimensionality(3)
+        gaussian.SetStandardDeviations(
+            SEGMENTATION_GAUSSIAN_SIGMA_VOXELS,
+            SEGMENTATION_GAUSSIAN_SIGMA_VOXELS,
+            SEGMENTATION_GAUSSIAN_SIGMA_VOXELS,
+        )
+        gaussian.SetRadiusFactors(
+            SEGMENTATION_GAUSSIAN_RADIUS_FACTOR,
+            SEGMENTATION_GAUSSIAN_RADIUS_FACTOR,
+            SEGMENTATION_GAUSSIAN_RADIUS_FACTOR,
+        )
+
+        contour = vtk.vtkFlyingEdges3D()
+        contour.SetInputConnection(gaussian.GetOutputPort())
+        contour.SetValue(0, 0.5)
+        contour.ComputeNormalsOn()
+        contour.ComputeGradientsOff()
+        contour.ComputeScalarsOff()
+        contour.Update()
+
+        surface = vtk.vtkPolyData()
+        surface.ShallowCopy(contour.GetOutput())
+        if surface.GetNumberOfPoints() == 0:
+            continue
+
+        labels = vtk.vtkUnsignedCharArray()
+        labels.SetName("VertebraLabel")
+        labels.SetNumberOfTuples(surface.GetNumberOfPoints())
+        labels.Fill(label)
+        surface.GetPointData().SetScalars(labels)
+        surfaces.AddInputData(surface)
+
+    surfaces.Update()
+    output = vtk.vtkPolyData()
+    output.ShallowCopy(surfaces.GetOutput())
+    return output
+
+
+def reset_camera_to_posterior(renderer: vtk.vtkRenderer) -> None:
+    """Fit visible props with a posterior-to-anterior view in LPS coordinates."""
+
+    bounds = renderer.ComputeVisiblePropBounds()
+    if not vtk.vtkMath.AreBoundsInitialized(bounds):
+        return
+
+    center = (
+        (bounds[0] + bounds[1]) / 2.0,
+        (bounds[2] + bounds[3]) / 2.0,
+        (bounds[4] + bounds[5]) / 2.0,
+    )
+    camera = renderer.GetActiveCamera()
+    # The viewer uses patient-space LPS coordinates: +Y is posterior and +Z is superior.
+    camera.SetFocalPoint(*center)
+    camera.SetPosition(center[0], center[1] + 1.0, center[2])
+    camera.SetViewUp(0.0, 0.0, 1.0)
+    renderer.ResetCamera(bounds)
+    camera.OrthogonalizeViewUp()
+    renderer.ResetCameraClippingRange(bounds)
 
 
 class Volume3DPanel(QFrame):
@@ -92,12 +202,14 @@ class Volume3DPanel(QFrame):
         self.volume_actor.SetProperty(self.volume_property)
         self._volume_added = False
 
-        self.segmentation_contour = vtk.vtkDiscreteMarchingCubes()
-        self.segmentation_contour.GenerateValues(VERTEBRA_LABEL_COUNT, 1, VERTEBRA_LABEL_COUNT)
+        self.segmentation_contour = vtk.vtkAppendPolyData()
         self.segmentation_mapper = vtk.vtkPolyDataMapper()
         self.segmentation_mapper.SetInputConnection(self.segmentation_contour.GetOutputPort())
         self.segmentation_mapper.SetLookupTable(create_segmentation_lookup_table(opacity=1.0))
         self.segmentation_mapper.SetScalarRange(1, VERTEBRA_LABEL_COUNT)
+        self.segmentation_mapper.SetScalarModeToUsePointData()
+        self.segmentation_mapper.SetColorModeToMapScalars()
+        self.segmentation_mapper.UseLookupTableScalarRangeOn()
         self.segmentation_mapper.ScalarVisibilityOn()
         self.segmentation_actor = vtk.vtkActor()
         self.segmentation_actor.SetMapper(self.segmentation_mapper)
@@ -105,6 +217,7 @@ class Volume3DPanel(QFrame):
         self.segmentation_actor.GetProperty().SetDiffuse(0.75)
         self.segmentation_actor.GetProperty().SetSpecular(0.15)
         self.segmentation_actor.GetProperty().SetOpacity(1.0)
+        self.segmentation_actor.ForceOpaqueOn()
         self.segmentation_actor.SetVisibility(False)
         self.renderer.AddActor(self.segmentation_actor)
 
@@ -121,7 +234,9 @@ class Volume3DPanel(QFrame):
         self.reset_camera()
 
     def set_segmentation(self, segmentation: SegmentationVolume) -> None:
-        self.segmentation_contour.SetInputData(segmentation.vtk_image)
+        surface = create_smoothed_segmentation_surface(segmentation.vtk_image)
+        self.segmentation_contour.RemoveAllInputs()
+        self.segmentation_contour.AddInputData(surface)
         self.segmentation_contour.Update()
         self.model_toggle.setEnabled(True)
         self.model_toggle.setChecked(True)
@@ -148,7 +263,7 @@ class Volume3DPanel(QFrame):
         self.vtk_widget.GetRenderWindow().Render()
 
     def reset_camera(self) -> None:
-        self.renderer.ResetCamera()
+        reset_camera_to_posterior(self.renderer)
         self.vtk_widget.GetRenderWindow().Render()
 
     def _set_segmentation_visible(self, visible: bool) -> None:
