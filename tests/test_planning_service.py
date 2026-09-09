@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import SimpleITK as sitk
 
 from bart_spine_ui.imaging.models import MedicalVolume
@@ -35,6 +36,57 @@ def test_estimated_direction_is_parallel_to_estimated_endplate():
     assert plan.anatomical_length_mm > 20.0
     assert 3.0 <= plan.diameter_mm <= 8.0
     assert 25.0 <= plan.length_mm <= 80.0
+    assert plan.trajectory_method in ("STP", "MP")
+    assert plan.pedicle_midpoint is not None
+    assert plan.screw_tip_point is not None
+
+
+def test_entry_deviation_updates_axial_angle_toward_fixed_stp():
+    array = np.zeros((50, 90, 80), dtype=np.uint16)
+    array[15:35, 10:75, 20:60] = 16
+    image = sitk.GetImageFromArray(array)
+    segmentation = SegmentationVolume(
+        sitk_image=image,
+        vtk_image=None,
+        labels={16: "L4"},
+        source_directory=None,
+    )
+    service = PediclePlanningService()
+
+    first = service.estimate(segmentation, "L4", "left", (50.0, 73.0, 25.0))
+    deviated = service.estimate(segmentation, "L4", "left", (45.0, 73.0, 25.0))
+
+    assert np.allclose(first.screw_tip_point, deviated.screw_tip_point)
+    assert not np.isclose(first.axial_angle_deg, deviated.axial_angle_deg)
+    for plan in (first, deviated):
+        target = np.asarray(
+            plan.screw_tip_point
+            if plan.trajectory_method == "STP"
+            else plan.pedicle_midpoint
+        )
+        entry = np.asarray(plan.entry_point)
+        expected = np.degrees(np.arctan2(target[0] - entry[0], -(target[1] - entry[1])))
+        assert np.isclose(plan.axial_angle_deg, expected)
+
+
+def test_short_corridor_is_rejected_instead_of_creating_20_mm_screw():
+    array = np.zeros((50, 90, 80), dtype=np.uint16)
+    array[15:35, 50:75, 20:60] = 16
+    image = sitk.GetImageFromArray(array)
+    segmentation = SegmentationVolume(
+        sitk_image=image,
+        vtk_image=None,
+        labels={16: "L4"},
+        source_directory=None,
+    )
+
+    with pytest.raises(ValueError, match="No safe STP or MP trajectory"):
+        PediclePlanningService().estimate(
+            segmentation,
+            "L4",
+            "left",
+            (50.0, 73.0, 25.0),
+        )
 
 
 def test_suggested_focus_uses_largest_posterolateral_axial_slice():
@@ -106,6 +158,9 @@ def test_screw_plans_round_trip_through_case_json(tmp_path):
         diameter_mm=6.0,
         length_mm=40.0,
         endplate_normal=(0.0, 0.0, 1.0),
+        pedicle_midpoint=(9.0, 8.0, 30.0),
+        screw_tip_point=(8.0, -12.0, 30.0),
+        trajectory_method="STP",
     ).with_angles(axial_angle_deg=12.0, sagittal_angle_deg=4.0)
     service = PediclePlanningService()
 
@@ -120,6 +175,9 @@ def test_screw_plans_round_trip_through_case_json(tmp_path):
     assert path == tmp_path / "planning" / "pedicle_screws.json"
     assert np.isclose(loaded[("L4", "left")].axial_angle_deg, 12.0)
     assert np.isclose(loaded[("L4", "left")].sagittal_angle_deg, 4.0)
+    assert loaded[("L4", "left")].pedicle_midpoint == (9.0, 8.0, 30.0)
+    assert loaded[("L4", "left")].screw_tip_point == (8.0, -12.0, 30.0)
+    assert loaded[("L4", "left")].trajectory_method == "STP"
     assert accepted == {("L4", "left")}
 
 

@@ -15,6 +15,7 @@ from .models import ScrewPlan, Side
 LEVEL_ORDER = tuple([f"T{i}" for i in range(1, 13)] + [f"L{i}" for i in range(1, 6)])
 STANDARD_DIAMETERS_MM = tuple(np.arange(3.0, 8.5, 0.5).tolist())
 STANDARD_LENGTHS_MM = tuple(range(25, 81, 5))
+MIN_SAFE_CORRIDOR_LENGTH_MM = 25.0
 
 
 def parse_levels_of_interest(region: str | None) -> list[str]:
@@ -140,12 +141,63 @@ class PediclePlanningService:
 
         entry = np.asarray(entry_point_lps, dtype=float)
         endplate_normal = self._estimate_endplate_normal(points)
-        direction = self._estimate_direction(points, entry, side, endplate_normal)
-        direction = self._optimize_pedicle_corridor(
+        reference_entry = np.asarray(
+            self.suggested_focus_point(segmentation, level, side), dtype=float
+        )
+        optimal_direction = self._estimate_direction(
+            points, reference_entry, side, endplate_normal
+        )
+        optimal_direction = self._optimize_pedicle_corridor(
             segmentation.sitk_image,
             label,
+            reference_entry,
+            optimal_direction,
+            endplate_normal,
+        )
+        reference_length, _reference_warning = self._ray_length(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            optimal_direction,
+        )
+        pedicle_midpoint = self._estimate_pedicle_midpoint(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            optimal_direction,
+            endplate_normal,
+            reference_length,
+        )
+        optimal_direction = self._direction_toward_reference(
+            reference_entry,
+            pedicle_midpoint,
+            endplate_normal,
+        )
+        reference_length, _reference_warning = self._ray_length(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            optimal_direction,
+        )
+        screw_tip_point = self._estimate_screw_tip_point(
+            points,
+            reference_entry,
+            optimal_direction,
+            reference_length,
+        )
+
+        # Suter et al. define the adapted trajectory from the surgeon's actual
+        # entry point to the fixed screw-tip reference. Prefer EP->STP, but only
+        # after verifying a continuous ipsilateral bone corridor. EP->MP is the
+        # paper-based fallback; an unsafe short path now produces no screw.
+        direction, trajectory_method = self._select_updated_direction(
+            segmentation.sitk_image,
+            label,
+            points,
+            side,
             entry,
-            direction,
+            screw_tip_point,
+            pedicle_midpoint,
             endplate_normal,
         )
 
@@ -169,6 +221,11 @@ class PediclePlanningService:
         endpoint = entry + direction * recommended_length
 
         warning = ray_warning
+        if trajectory_method == "MP":
+            warning = (
+                "STP corridor rejected by safety checks; using the pedicle midpoint."
+                + (f" {warning}" if warning else "")
+            )
         if pedicle_width < 3.5:
             width_warning = "Very small/uncertain mask clearance; verify segmentation and trajectory."
             warning = f"{warning} {width_warning}".strip() if warning else width_warning
@@ -184,6 +241,9 @@ class PediclePlanningService:
             diameter_mm=float(recommended_diameter),
             length_mm=float(recommended_length),
             endplate_normal=tuple(float(v) for v in endplate_normal),
+            pedicle_midpoint=tuple(float(v) for v in pedicle_midpoint),
+            screw_tip_point=tuple(float(v) for v in screw_tip_point),
+            trajectory_method=trajectory_method,
             warning=warning,
         )
 
@@ -259,6 +319,17 @@ class PediclePlanningService:
                     endplate_normal=tuple(
                         float(v) for v in row["estimated_endplate_normal_lps"]
                     ),
+                    pedicle_midpoint=(
+                        tuple(float(v) for v in row["pedicle_midpoint_lps_mm"])
+                        if row.get("pedicle_midpoint_lps_mm") is not None
+                        else None
+                    ),
+                    screw_tip_point=(
+                        tuple(float(v) for v in row["screw_tip_point_lps_mm"])
+                        if row.get("screw_tip_point_lps_mm") is not None
+                        else None
+                    ),
+                    trajectory_method=str(row.get("trajectory_method", "legacy")),
                     warning=row.get("warning"),
                 )
             except (KeyError, TypeError, ValueError):
@@ -432,6 +503,139 @@ class PediclePlanningService:
 
         return self._direction_for_axial_angle(initial_axial, endplate_normal)
 
+    def _direction_toward_reference(
+        self,
+        entry: np.ndarray,
+        reference: np.ndarray,
+        endplate_normal: np.ndarray,
+    ) -> np.ndarray:
+        """Use the EP-to-reference bearing for axial angle, preserving endplate slope."""
+
+        offset = np.asarray(reference, dtype=float) - np.asarray(entry, dtype=float)
+        if float(np.hypot(offset[0], offset[1])) < 1e-6 or offset[1] >= -0.05:
+            raise ValueError("The STP is not anterior to the selected entry point.")
+        axial_angle = math.degrees(math.atan2(float(offset[0]), -float(offset[1])))
+        return self._direction_for_axial_angle(axial_angle, endplate_normal)
+
+    def _select_updated_direction(
+        self,
+        image: sitk.Image,
+        label: int,
+        points: np.ndarray,
+        side: Side,
+        entry: np.ndarray,
+        screw_tip_point: np.ndarray,
+        pedicle_midpoint: np.ndarray,
+        endplate_normal: np.ndarray,
+    ) -> tuple[np.ndarray, str]:
+        """Select a paper-based update only when its bone corridor is feasible."""
+
+        anterior_cut = float(np.percentile(points[:, 1], 55))
+        body_points = points[points[:, 1] <= anterior_cut]
+        if len(body_points) < 20:
+            body_points = points
+        body_center_x = float(np.median(body_points[:, 0]))
+        side_sign = 1.0 if side == "left" else -1.0
+        failures: list[str] = []
+
+        for method, target in (("STP", screw_tip_point), ("MP", pedicle_midpoint)):
+            target = np.asarray(target, dtype=float)
+            if side_sign * (target[0] - body_center_x) <= 0.5:
+                failures.append(f"{method} crossed the vertebral midline")
+                continue
+            if method == "STP" and not self._is_label(image, label, target):
+                failures.append("STP was outside the vertebral body mask")
+                continue
+            try:
+                direction = self._direction_toward_reference(
+                    entry,
+                    target,
+                    endplate_normal,
+                )
+            except ValueError as exc:
+                failures.append(f"{method}: {exc}")
+                continue
+
+            length, _warning = self._ray_length(image, label, entry, direction)
+            if length < MIN_SAFE_CORRIDOR_LENGTH_MM:
+                failures.append(f"{method} bone corridor ended after {length:.1f} mm")
+                continue
+            target_distance = float(np.dot(target - entry, direction))
+            if method == "STP" and length + self.cortical_margin_mm < target_distance:
+                failures.append("STP was not reachable through continuous segmented bone")
+                continue
+            return direction, method
+
+        detail = "; ".join(failures)
+        raise ValueError(
+            "No safe STP or MP trajectory was found. The entry may face the spinal canal; "
+            f"re-mark the entry point or adjust manually. {detail}"
+        )
+
+    def _estimate_pedicle_midpoint(
+        self,
+        image: sitk.Image,
+        label: int,
+        entry: np.ndarray,
+        direction: np.ndarray,
+        endplate_normal: np.ndarray,
+        anatomical_length: float,
+    ) -> np.ndarray:
+        """Approximate the center of the narrowest pedicle cross-section (MP)."""
+
+        lateral = self._normalize(np.cross(endplate_normal, direction))
+        vertical = self._normalize(np.cross(direction, lateral))
+        best_center: np.ndarray | None = None
+        best_width = math.inf
+        end_t = max(8.0, min(30.0, anatomical_length * 0.55))
+        for distance in np.arange(8.0, end_t + 0.01, 1.0):
+            center = entry + direction * float(distance)
+            if not self._is_label(image, label, center):
+                continue
+            left = self._distance_to_edge(image, label, center, lateral)
+            right = self._distance_to_edge(image, label, center, -lateral)
+            upper = self._distance_to_edge(image, label, center, vertical)
+            lower = self._distance_to_edge(image, label, center, -vertical)
+            if min(left, right, upper, lower) < 1.0:
+                continue
+            outline_width = min(left + right, upper + lower)
+            if outline_width < best_width:
+                best_width = outline_width
+                corrected = (
+                    center
+                    + lateral * (left - right) * 0.5
+                    + vertical * (upper - lower) * 0.5
+                )
+                best_center = corrected if self._is_label(image, label, corrected) else center
+        if best_center is None:
+            raise ValueError("Could not locate a continuous narrow pedicle cross-section.")
+        return np.asarray(best_center, dtype=float)
+
+    def _estimate_screw_tip_point(
+        self,
+        points: np.ndarray,
+        entry: np.ndarray,
+        direction: np.ndarray,
+        anatomical_length: float,
+    ) -> np.ndarray:
+        """Place STP at the fourth-to-fifth fifth of vertebral-body AP depth."""
+
+        body_cut = float(np.percentile(points[:, 1], 55))
+        body_points = points[points[:, 1] <= body_cut]
+        if len(body_points) < 20:
+            body_points = points
+        posterior_y = float(np.percentile(body_points[:, 1], 98))
+        anterior_y = float(np.percentile(body_points[:, 1], 2))
+        target_y = posterior_y + 0.8 * (anterior_y - posterior_y)
+        if direction[1] < -1e-6:
+            distance = (target_y - entry[1]) / direction[1]
+        else:
+            distance = anatomical_length * 0.8
+        if not np.isfinite(distance) or distance <= 0.0:
+            distance = anatomical_length * 0.8
+        distance = float(np.clip(distance, 8.0, max(8.0, anatomical_length)))
+        return np.asarray(entry, dtype=float) + direction * distance
+
     def _optimize_pedicle_corridor(
         self,
         image: sitk.Image,
@@ -523,11 +727,11 @@ class PediclePlanningService:
         )
         hit_indices = np.flatnonzero(inside)
         if len(hit_indices) == 0:
-            return 30.0, "Entry ray did not intersect the selected vertebral mask; using fallback length."
+            return 0.0, "Entry ray did not intersect the selected vertebral mask."
 
         first = int(hit_indices[0])
         if distances[first] > 10.0:
-            return 30.0, "Entry point is far from the selected mask; using fallback length."
+            return 0.0, "Entry point is far from the selected vertebral mask."
 
         # Allow tiny one-voxel gaps but stop after ~2 mm continuously outside the label.
         gap_limit = max(2, round(2.0 / step))
@@ -543,7 +747,7 @@ class PediclePlanningService:
                     break
 
         exit_distance = float(distances[last_inside])
-        safe = max(20.0, exit_distance - self.cortical_margin_mm)
+        safe = max(0.0, exit_distance - self.cortical_margin_mm)
         warning = None
         if safe <= 22.0:
             warning = "Short mask intersection; verify the marked entry point and segmentation."

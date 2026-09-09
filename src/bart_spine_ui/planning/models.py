@@ -28,6 +28,9 @@ class ScrewPlan:
     diameter_mm: float
     length_mm: float
     endplate_normal: tuple[float, float, float]
+    pedicle_midpoint: tuple[float, float, float] | None = None
+    screw_tip_point: tuple[float, float, float] | None = None
+    trajectory_method: str = "STP"
     warning: str | None = None
 
     @property
@@ -103,5 +106,12 @@ class ScrewPlan:
             "axial_angle_deg": round(self.axial_angle_deg, 2),
             "sagittal_angle_deg": round(self.sagittal_angle_deg, 2),
             "estimated_endplate_normal_lps": list(self.endplate_normal),
+            "pedicle_midpoint_lps_mm": (
+                list(self.pedicle_midpoint) if self.pedicle_midpoint is not None else None
+            ),
+            "screw_tip_point_lps_mm": (
+                list(self.screw_tip_point) if self.screw_tip_point is not None else None
+            ),
+            "trajectory_method": self.trajectory_method,
             "warning": self.warning,
         }

@@ -404,6 +404,7 @@ class PlanningPage(WorkflowPage):
         # Target activation is review mode by default. Cancel stale entry-picking
         # state so returning to an existing unaccepted screw restores the ✓ button
         # instead of waiting for another entry-point click.
+        self.workspace.set_pending_entry_point(None)
         self.workspace.begin_entry_point_marking(False)
         self.left_sidebar.set_marking(False)
 
@@ -467,6 +468,7 @@ class PlanningPage(WorkflowPage):
             )
         except Exception as exc:  # noqa: BLE001
             self._show_planning_error(f"Could not estimate {level} {side} screw: {exc}")
+            self._begin_entry_marking()
             return
 
         self.plans[key] = plan
@@ -486,7 +488,9 @@ class PlanningPage(WorkflowPage):
         self._show_plan(plan, remember_auto=True)
         self._save_plans()
         self.status_changed.emit(
-            f"Estimated {level} {side}: Ø{plan.diameter_mm:.1f} × {plan.length_mm:.0f} mm"
+            f"Estimated {level} {side}: {plan.trajectory_method}-updated axial "
+            f"{plan.axial_angle_deg:.1f}° · "
+            f"Ø{plan.diameter_mm:.1f} × {plan.length_mm:.0f} mm"
         )
 
     def _show_plan(self, plan: ScrewPlan, *, remember_auto: bool) -> None:

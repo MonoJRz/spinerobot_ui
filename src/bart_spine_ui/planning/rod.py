@@ -73,7 +73,7 @@ def build_rod_plan(
     *,
     material: str = "Ti-6Al-4V",
     diameter_mm: float = GENERIC_TI_ROD_DIAMETER_MM,
-    overhang_mm: float = 5.0,
+    overhang_mm: float = 12.0,
     samples: int = 160,
 ) -> RodPlan | None:
     """Create a fair candidate rod constrained by, but not forced through, tulips.

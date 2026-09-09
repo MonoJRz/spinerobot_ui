@@ -32,6 +32,7 @@ class PlanningWorkspace(ImagingWorkspace):
         self._volume: MedicalVolume | None = None
         self._segmentation: SegmentationVolume | None = None
         self._marking_entry = False
+        self._pending_entry_point: tuple[float, float, float] | None = None
         self._active_plan: ScrewPlan | None = None
         self._plans: dict[tuple[str, Side], ScrewPlan] = {}
         self._mpr_overlay_actors: dict[object, list[vtk.vtkProp]] = {
@@ -163,8 +164,18 @@ class PlanningWorkspace(ImagingWorkspace):
     ) -> None:
         self._plans = dict(plans)
         self._active_plan = self._plans.get(active_key) if active_key is not None else None
+        if self._active_plan is not None:
+            self._pending_entry_point = None
         self._sync_angle_controls()
         self._refresh_all_overlays()
+
+    def set_pending_entry_point(
+        self,
+        point: tuple[float, float, float] | None,
+    ) -> None:
+        self._pending_entry_point = point
+        for panel in self.mpr_views:
+            self._refresh_mpr_overlay(panel)
 
     def set_active_plan(self, plan: ScrewPlan | None) -> None:
         self._active_plan = plan
@@ -176,6 +187,7 @@ class PlanningWorkspace(ImagingWorkspace):
     def clear_plans(self) -> None:
         self._plans.clear()
         self._active_plan = None
+        self._pending_entry_point = None
         self._sync_angle_controls()
         self._clear_mpr_overlays()
         self._clear_three_d_overlays()
@@ -230,6 +242,7 @@ class PlanningWorkspace(ImagingWorkspace):
             return
         patient = axes.MultiplyPoint((float(local[0]), float(local[1]), 0.0, 1.0))
         point = (float(patient[0]), float(patient[1]), float(patient[2]))
+        self.set_pending_entry_point(point)
         self._marking_entry = False
         self.begin_entry_point_marking(False)
         self.entry_point_picked.emit(point)
@@ -311,16 +324,34 @@ class PlanningWorkspace(ImagingWorkspace):
             panel.renderer.RemoveViewProp(actor)
         self._mpr_overlay_actors[panel].clear()
 
-        plan = self._active_plan
-        if plan is None:
-            panel.render()
-            return
-
         axes = panel.reslice.GetResliceAxes()
         if axes is None:
             return
         inverse = vtk.vtkMatrix4x4()
         vtk.vtkMatrix4x4.Invert(axes, inverse)
+
+        pending_actor = None
+        if self._pending_entry_point is not None:
+            pending = self._project_patient_to_slice(inverse, self._pending_entry_point)
+            pending_marker = vtk.vtkRegularPolygonSource()
+            pending_marker.SetNumberOfSides(4)
+            pending_marker.SetRadius(3.2)
+            pending_marker.SetCenter(pending[0], pending[1], 0.18)
+            pending_marker.GeneratePolygonOff()
+            pending_mapper = vtk.vtkPolyDataMapper()
+            pending_mapper.SetInputConnection(pending_marker.GetOutputPort())
+            pending_actor = vtk.vtkActor()
+            pending_actor.SetMapper(pending_mapper)
+            pending_actor.GetProperty().SetColor(1.0, 0.76, 0.15)
+            pending_actor.GetProperty().SetLineWidth(3.0)
+            pending_actor.PickableOff()
+            panel.renderer.AddActor(pending_actor)
+            self._mpr_overlay_actors[panel].append(pending_actor)
+
+        plan = self._active_plan
+        if plan is None:
+            panel.render()
+            return
 
         entry = self._project_patient_to_slice(inverse, plan.entry_point)
         endpoint = self._project_patient_to_slice(inverse, plan.endpoint)
