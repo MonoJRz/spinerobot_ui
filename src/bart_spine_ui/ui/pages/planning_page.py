@@ -400,6 +400,13 @@ class PlanningPage(WorkflowPage):
         if not self._queue or self.current_segmentation is None:
             return
         key = self._queue[self._target_index]
+
+        # Target activation is review mode by default. Cancel stale entry-picking
+        # state so returning to an existing unaccepted screw restores the ✓ button
+        # instead of waiting for another entry-point click.
+        self.workspace.begin_entry_point_marking(False)
+        self.left_sidebar.set_marking(False)
+
         level, side = key
         plan = self.plans.get(key)
         self.left_sidebar.set_completed(self.accepted)
@@ -613,8 +620,12 @@ class PlanningPage(WorkflowPage):
         self._activate_target()
 
     def _select_and_mark_target(self, level: str, side: str) -> None:
+        key = (level, side)
         self._select_target(level, side)
-        if (level, side) in self._queue:
+
+        # Existing screws open in review mode so they can be adjusted/accepted.
+        # Only targets without a plan immediately enter entry-point marking mode.
+        if key in self._queue and key not in self.plans:
             self._begin_entry_marking()
 
     def _reject_current(self) -> None:

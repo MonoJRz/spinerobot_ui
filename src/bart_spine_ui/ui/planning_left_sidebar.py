@@ -29,6 +29,8 @@ class PlanningLeftSidebar(QFrame):
         self._running = False
         self._loading = False
         self._marking = False
+        # Explicit plan state; do not infer it from button enabled state.
+        self._has_plan = False
         self._target_buttons: dict[tuple[str, str], QPushButton] = {}
         self._planned: set[tuple[str, str]] = set()
         self._active_key: tuple[str, str] | None = None
@@ -216,8 +218,9 @@ class PlanningLeftSidebar(QFrame):
         has_plan: bool,
     ) -> None:
         self._active_key = (level, side)
+        self._has_plan = bool(has_plan)
         self.target_label.setText(f"{level}  ·  {side.upper()}")
-        self.accept_button.setEnabled(has_plan)
+        self.accept_button.setEnabled(self._has_plan and not self._marking)
         self.reject_button.setEnabled(True)
         self._refresh_target_buttons()
 
@@ -242,7 +245,8 @@ class PlanningLeftSidebar(QFrame):
         self.depth_value.setText(f"{anatomical_length_mm:.1f} mm")
         self.width_value.setText(f"{pedicle_width_mm:.1f} mm")
         self.screw_value.setText(f"Ø{diameter_mm:.1f} × {length_mm:.0f}")
-        self.accept_button.setEnabled(True)
+        self._has_plan = True
+        self.accept_button.setEnabled(not self._marking)
         if warning:
             self.target_label.setToolTip(warning)
 
@@ -250,6 +254,7 @@ class PlanningLeftSidebar(QFrame):
         self.depth_value.setText("—")
         self.width_value.setText("—")
         self.screw_value.setText("—")
+        self._has_plan = False
         self.accept_button.setEnabled(False)
 
     def set_completed(self, planned: set[tuple[str, str]]) -> None:

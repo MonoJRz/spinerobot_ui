@@ -45,7 +45,7 @@ class PediclePlanningService:
     The method intentionally stays conservative and transparent:
       * the user chooses the cortical entry point;
       * the vertebral mask supplies geometry;
-      * a PCA-derived superior/inferior axis estimates the endplate normal;
+      * a trimmed superior-surface SVD estimates the superior endplate normal;
       * the trajectory is projected into that estimated endplate plane;
       * a ray/mask intersection estimates usable length;
       * radial mask clearance along the posterior part of the ray estimates pedicle width.
@@ -278,50 +278,123 @@ class PediclePlanningService:
         return base / "planning" / "pedicle_screws.json"
 
     def _estimate_endplate_normal(self, points: np.ndarray) -> np.ndarray:
-        """Fit the slope of the superior vertebral-body surface."""
+        """Estimate the superior endplate normal with a low-cost robust SVD fit.
 
-        z_axis = np.array([0.0, 0.0, 1.0])
+        The fit uses only the anterior vertebral-body region, extracts one superior
+        surface point per 2 mm XY bin, removes the peripheral rim, then performs a
+        few tiny SVD fits while trimming outliers.  This avoids letting pedicles,
+        spinous/transverse processes, or isolated superior-rim voxels dominate the
+        endplate orientation.
+        """
 
-        # LPS anterior is -Y. Restrict the fit toward the anterior vertebral body so
-        # posterior elements do not dominate the endplate estimate.
+        z_axis = np.array([0.0, 0.0, 1.0], dtype=float)
+
+        # LPS: anterior is -Y.  The anterior portion of a complete vertebral mask is
+        # a cheap proxy for the vertebral body and keeps posterior elements out of
+        # the endplate fit.
         anterior_cut = float(np.percentile(points[:, 1], 55))
         body_points = points[points[:, 1] <= anterior_cut]
         if len(body_points) < 100:
             body_points = points
 
-        # Build a superior envelope: one highest surface point per 2 mm XY bin.
-        # This follows the endplate slope rather than fitting an arbitrary upper band.
+        # One highest point per ~2 mm XY cell gives a sparse superior envelope.
         xy_bins = np.rint(body_points[:, :2] / 2.0).astype(int)
         _bins, inverse = np.unique(xy_bins, axis=0, return_inverse=True)
         maximum_z = np.full(int(np.max(inverse)) + 1, -np.inf, dtype=float)
         np.maximum.at(maximum_z, inverse, body_points[:, 2])
-        surface = body_points[np.isclose(body_points[:, 2], maximum_z[inverse])]
-        if len(surface) >= 30:
-            design = np.column_stack((surface[:, 0], surface[:, 1], np.ones(len(surface))))
-            coefficients, *_ = np.linalg.lstsq(design, surface[:, 2], rcond=None)
-            residuals = surface[:, 2] - design @ coefficients
-            keep = np.abs(residuals - np.median(residuals)) <= max(
-                1.5,
-                float(np.percentile(np.abs(residuals - np.median(residuals)), 80)),
-            )
-            if np.count_nonzero(keep) >= 20:
-                coefficients, *_ = np.linalg.lstsq(
-                    design[keep], surface[keep, 2], rcond=None
-                )
-            normal = self._normalize(
-                np.array((-coefficients[0], -coefficients[1], 1.0), dtype=float)
-            )
-            if abs(float(np.dot(normal, z_axis))) >= 0.45:
-                return normal
 
-        centered = points - np.mean(points, axis=0)
-        covariance = np.cov(centered.T)
-        _values, vectors = np.linalg.eigh(covariance)
-        idx = int(np.argmax(np.abs(vectors.T @ z_axis)))
-        normal = vectors[:, idx]
-        if float(np.dot(normal, z_axis)) < 0:
-            normal = -normal
-        return self._normalize(normal)
+        # Keep points that lie on the superior envelope.  Multiple equal-height
+        # voxels in a bin are harmless because the next central-footprint trim
+        # removes most rim duplication.
+        surface = body_points[
+            np.isclose(body_points[:, 2], maximum_z[inverse], atol=0.25)
+        ]
+        if len(surface) < 30:
+            raise ValueError("Could not extract enough superior endplate surface points.")
+
+        # Remove the curved/peripheral cortical rim and occasional osteophyte tips.
+        # Keeping the middle footprint makes the fitted plane better match the
+        # visual superior endplate while adding negligible computation.
+        x_lo, x_hi = np.percentile(surface[:, 0], (12.5, 87.5))
+        y_lo, y_hi = np.percentile(surface[:, 1], (10.0, 90.0))
+        central = surface[
+            (surface[:, 0] >= x_lo)
+            & (surface[:, 0] <= x_hi)
+            & (surface[:, 1] >= y_lo)
+            & (surface[:, 1] <= y_hi)
+        ]
+        if len(central) >= 30:
+            surface = central
+
+        # Robust plane PCA/SVD: the direction with the *smallest* variance is the
+        # plane normal.  Three iterations are inexpensive because this is only a
+        # small surface point set and each SVD has three columns.
+        fit_points = surface
+        normal = z_axis.copy()
+        for iteration in range(3):
+            center = np.median(fit_points, axis=0)
+            centered = fit_points - center
+            _u, _s, vh = np.linalg.svd(centered, full_matrices=False)
+            normal = vh[-1]
+            if float(np.dot(normal, z_axis)) < 0.0:
+                normal = -normal
+            normal = self._normalize(normal)
+
+            if iteration == 2 or len(fit_points) < 40:
+                break
+
+            distances = np.abs(centered @ normal)
+            # Trim the worst 20% but retain a small physical tolerance so nearly
+            # planar data is not over-pruned by numerical noise.
+            cutoff = max(0.75, float(np.percentile(distances, 80)))
+            keep = distances <= cutoff
+            if np.count_nonzero(keep) < 30:
+                break
+            fit_points = fit_points[keep]
+
+        # A superior endplate normal should retain a meaningful superior/inferior
+        # component.  Do not silently fall back to whole-vertebra PCA, because that
+        # mixes the body with posterior elements and can create a wrong sagittal tilt.
+        if abs(float(np.dot(normal, z_axis))) < 0.35:
+            raise ValueError(
+                "Superior endplate orientation is uncertain; verify the segmentation."
+            )
+        return normal
+
+    def _direction_for_axial_angle(
+        self,
+        axial_angle_deg: float,
+        endplate_normal: np.ndarray,
+    ) -> np.ndarray:
+        """Return the exact requested axial heading constrained to the endplate plane.
+
+        The XY projection keeps the requested axial angle exactly.  The Z component
+        is solved analytically so dot(direction, endplate_normal) == 0.
+        """
+
+        axial = math.radians(float(axial_angle_deg))
+        horizontal = np.array(
+            (math.sin(axial), -math.cos(axial), 0.0),
+            dtype=float,
+        )
+
+        nz = float(endplate_normal[2])
+        if abs(nz) < 1e-6:
+            # This should already be rejected by _estimate_endplate_normal, but keep
+            # the helper numerically safe.
+            candidate = horizontal - float(
+                np.dot(horizontal, endplate_normal)
+            ) * endplate_normal
+            return self._normalize(candidate)
+
+        vertical_component = -float(
+            np.dot(endplate_normal, horizontal)
+        ) / nz
+        candidate = horizontal + np.array(
+            (0.0, 0.0, vertical_component),
+            dtype=float,
+        )
+        return self._normalize(candidate)
 
     def _estimate_direction(
         self,
@@ -330,32 +403,34 @@ class PediclePlanningService:
         side: Side,
         endplate_normal: np.ndarray,
     ) -> np.ndarray:
-        # LPS anterior is -Y. Use the anterior-most vertebral body region as a target.
+        # LPS anterior is -Y. Use the anterior-most vertebral body region only to
+        # obtain a cheap seed *axial* heading.  Sagittal tilt is then solved from
+        # the superior-endplate plane rather than inherited from the target point.
         anterior_cut = float(np.percentile(points[:, 1], 14))
         anterior = points[points[:, 1] <= anterior_cut]
         if len(anterior) < 20:
             anterior = points
         target = np.median(anterior, axis=0)
 
-        # Keep the target slightly ipsilateral so a posterior entry naturally converges medially.
+        # Keep the target slightly ipsilateral so a posterior entry naturally
+        # converges medially.
         center_x = float(np.median(points[:, 0]))
         ipsilateral = 1.0 if side == "left" else -1.0
-        body_half_width = max(3.0, float(np.percentile(np.abs(points[:, 0] - center_x), 65)))
+        body_half_width = max(
+            3.0,
+            float(np.percentile(np.abs(points[:, 0] - center_x), 65)),
+        )
         target[0] = center_x + ipsilateral * 0.12 * body_half_width
 
         raw = target - entry
-        # Project into the estimated endplate plane: dot(direction, normal) == 0.
-        direction = raw - float(np.dot(raw, endplate_normal)) * endplate_normal
-        if np.linalg.norm(direction) < 1e-6:
-            direction = np.array([0.0, -1.0, 0.0])
-        direction = self._normalize(direction)
+        # If the target is pathological or not anterior, use a straight-anterior
+        # seed.  Otherwise preserve the target's XY heading exactly.
+        if float(np.hypot(raw[0], raw[1])) < 1e-6 or raw[1] >= -0.05:
+            initial_axial = 0.0
+        else:
+            initial_axial = math.degrees(math.atan2(float(raw[0]), -float(raw[1])))
 
-        # Guard against a pathological PCA/entry combination pointing posteriorly.
-        if direction[1] > -0.05:
-            anterior = np.array([0.0, -1.0, 0.0])
-            anterior -= float(np.dot(anterior, endplate_normal)) * endplate_normal
-            direction = self._normalize(0.65 * direction + 0.35 * self._normalize(anterior))
-        return direction
+        return self._direction_for_axial_angle(initial_axial, endplate_normal)
 
     def _optimize_pedicle_corridor(
         self,
@@ -365,7 +440,7 @@ class PediclePlanningService:
         initial_direction: np.ndarray,
         endplate_normal: np.ndarray,
     ) -> np.ndarray:
-        """Choose a nearby axial trajectory with the best conservative 3D clearance."""
+        """Choose a nearby axial trajectory while staying exactly in the endplate plane."""
 
         initial_axial = math.degrees(
             math.atan2(float(initial_direction[0]), -float(initial_direction[1]))
@@ -373,12 +448,10 @@ class PediclePlanningService:
         best_direction = initial_direction
         best_score = -math.inf
         for offset in (-12.0, -8.0, -5.0, -2.5, 0.0, 2.5, 5.0, 8.0, 12.0):
-            axial = math.radians(initial_axial + offset)
-            horizontal = np.array((math.sin(axial), -math.cos(axial), 0.0), dtype=float)
-            candidate = horizontal - float(np.dot(horizontal, endplate_normal)) * endplate_normal
-            if np.linalg.norm(candidate) < 1e-8:
-                continue
-            candidate = self._normalize(candidate)
+            candidate = self._direction_for_axial_angle(
+                initial_axial + offset,
+                endplate_normal,
+            )
             if candidate[1] >= -0.05:
                 continue
             length, warning = self._ray_length(image, label, entry, candidate)
@@ -431,7 +504,8 @@ class PediclePlanningService:
                 negative = self._distance_to_edge(
                     image, label, center, -radial, max_radius_mm=12.0, step_mm=1.0
                 )
-                diameters.append(positive + negative)
+                safe_diameter = 2.0 * min(positive, negative)
+                diameters.append(safe_diameter)
         return min(diameters) if diameters else 0.0
 
     def _ray_length(
@@ -506,7 +580,8 @@ class PediclePlanningService:
                 radial = math.cos(angle) * u + math.sin(angle) * v
                 positive = self._distance_to_edge(image, label, center, radial)
                 negative = self._distance_to_edge(image, label, center, -radial)
-                diameters.append(positive + negative)
+                safe_diameter = 2.0 * min(positive, negative)
+                diameters.append(safe_diameter)
             if diameters:
                 cross_section_minima.append(min(diameters))
 
