@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QMainWindow
 from ..controllers import ImagingController
 from .pages.imaging_page import ImagingPage
 from .pages.placeholder_page import PlaceholderPage
-from .pages.planning_page import PlanningPage
+from .pages.planning_construct_page import PlanningPage
 from .procedure_shell import ProcedureShell
 
 
