@@ -14,6 +14,17 @@ HEAD_HEIGHT_MM = 15.0
 TULIP_SLOT_WIDTH_MM = 6.0
 
 
+@dataclass(frozen=True, slots=True)
+class PedicleFrame:
+    """Pedicle-local planning frame in patient LPS coordinates."""
+
+    reference_entry: tuple[float, float, float]
+    midpoint: tuple[float, float, float]
+    axis_direction: tuple[float, float, float]
+    endplate_normal: tuple[float, float, float]
+    screw_tip_point: tuple[float, float, float]
+
+
 @dataclass(slots=True)
 class ScrewPlan:
     """One editable pedicle screw plan in patient LPS coordinates (millimetres)."""

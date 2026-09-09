@@ -89,15 +89,10 @@ def test_short_corridor_is_rejected_instead_of_creating_20_mm_screw():
         )
 
 
-def test_suggested_focus_uses_largest_posterolateral_axial_slice():
-    array = np.zeros((15, 30, 30), dtype=np.uint16)  # z, y, x
-    # A small left posterior region through several slices.
-    array[3:12, 20:24, 18:22] = 16
-    # The pedicle region is deliberately widest on axial index 8.
-    array[8, 18:27, 16:28] = 16
+def test_suggested_focus_is_the_pedicle_midpoint():
+    array = np.zeros((50, 90, 80), dtype=np.uint16)
+    array[15:35, 10:75, 20:60] = 16
     image = sitk.GetImageFromArray(array)
-    image.SetSpacing((0.7, 0.8, 1.5))
-    image.SetOrigin((4.0, 5.0, 10.0))
     segmentation = SegmentationVolume(
         sitk_image=image,
         vtk_image=None,
@@ -105,11 +100,13 @@ def test_suggested_focus_uses_largest_posterolateral_axial_slice():
         source_directory=None,
     )
 
-    focus = PediclePlanningService().suggested_focus_point(
-        segmentation, "L4", "left"
-    )
+    service = PediclePlanningService()
+    frame = service.pedicle_frame(segmentation, "L4", "left")
+    focus = service.suggested_focus_point(segmentation, "L4", "left")
 
-    assert image.TransformPhysicalPointToIndex(focus)[2] == 8
+    assert np.allclose(focus, frame.midpoint)
+    assert np.isclose(np.linalg.norm(frame.axis_direction), 1.0)
+    assert abs(float(np.dot(frame.axis_direction, frame.endplate_normal))) < 1e-6
 
 
 def test_screw_plan_angles_update_direction_endpoint_and_json():

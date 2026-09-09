@@ -10,7 +10,7 @@ import SimpleITK as sitk
 
 from ..imaging.models import MedicalVolume
 from ..segmentation import SegmentationVolume
-from .models import ScrewPlan, Side
+from .models import PedicleFrame, ScrewPlan, Side
 
 LEVEL_ORDER = tuple([f"T{i}" for i in range(1, 13)] + [f"L{i}" for i in range(1, 6)])
 STANDARD_DIAMETERS_MM = tuple(np.arange(3.0, 8.5, 0.5).tolist())
@@ -81,7 +81,83 @@ class PediclePlanningService:
         level: str,
         side: Side,
     ) -> tuple[float, float, float]:
-        """Posterolateral point on the axial slice with the largest pedicle region."""
+        """Return the estimated pedicle-isthmus midpoint, not a scanner-slice proxy."""
+
+        return self.pedicle_frame(segmentation, level, side).midpoint
+
+    def pedicle_frame(
+        self,
+        segmentation: SegmentationVolume,
+        level: str,
+        side: Side,
+    ) -> PedicleFrame:
+        """Estimate an MP-centered local frame for one vertebral pedicle."""
+
+        label = self.label_value(segmentation, level)
+        points = self._label_points(segmentation.sitk_image, label, max_points=24000)
+        if len(points) < 20:
+            raise ValueError(f"The {level} segmentation is too small for planning.")
+
+        endplate_normal = self._estimate_endplate_normal(points)
+        reference_entry = np.asarray(
+            self._suggested_reference_entry(segmentation, level, side), dtype=float
+        )
+        axis_direction = self._estimate_direction(
+            points, reference_entry, side, endplate_normal
+        )
+        axis_direction = self._optimize_pedicle_corridor(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            axis_direction,
+            endplate_normal,
+        )
+        reference_length, _warning = self._ray_length(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            axis_direction,
+        )
+        midpoint = self._estimate_pedicle_midpoint(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            axis_direction,
+            endplate_normal,
+            reference_length,
+        )
+        axis_direction = self._direction_toward_reference(
+            reference_entry,
+            midpoint,
+            endplate_normal,
+        )
+        reference_length, _warning = self._ray_length(
+            segmentation.sitk_image,
+            label,
+            reference_entry,
+            axis_direction,
+        )
+        screw_tip_point = self._estimate_screw_tip_point(
+            points,
+            reference_entry,
+            axis_direction,
+            reference_length,
+        )
+        return PedicleFrame(
+            reference_entry=tuple(float(v) for v in reference_entry),
+            midpoint=tuple(float(v) for v in midpoint),
+            axis_direction=tuple(float(v) for v in axis_direction),
+            endplate_normal=tuple(float(v) for v in endplate_normal),
+            screw_tip_point=tuple(float(v) for v in screw_tip_point),
+        )
+
+    def _suggested_reference_entry(
+        self,
+        segmentation: SegmentationVolume,
+        level: str,
+        side: Side,
+    ) -> tuple[float, float, float]:
+        """Find a posterior seed used only to construct the pedicle-local frame."""
 
         label = self.label_value(segmentation, level)
         points = self._label_points(segmentation.sitk_image, label, max_points=120000)
@@ -135,56 +211,12 @@ class PediclePlanningService:
         entry_point_lps: tuple[float, float, float],
     ) -> ScrewPlan:
         label = self.label_value(segmentation, level)
-        points = self._label_points(segmentation.sitk_image, label, max_points=24000)
-        if len(points) < 20:
-            raise ValueError(f"The {level} segmentation is too small for planning.")
-
         entry = np.asarray(entry_point_lps, dtype=float)
-        endplate_normal = self._estimate_endplate_normal(points)
-        reference_entry = np.asarray(
-            self.suggested_focus_point(segmentation, level, side), dtype=float
-        )
-        optimal_direction = self._estimate_direction(
-            points, reference_entry, side, endplate_normal
-        )
-        optimal_direction = self._optimize_pedicle_corridor(
-            segmentation.sitk_image,
-            label,
-            reference_entry,
-            optimal_direction,
-            endplate_normal,
-        )
-        reference_length, _reference_warning = self._ray_length(
-            segmentation.sitk_image,
-            label,
-            reference_entry,
-            optimal_direction,
-        )
-        pedicle_midpoint = self._estimate_pedicle_midpoint(
-            segmentation.sitk_image,
-            label,
-            reference_entry,
-            optimal_direction,
-            endplate_normal,
-            reference_length,
-        )
-        optimal_direction = self._direction_toward_reference(
-            reference_entry,
-            pedicle_midpoint,
-            endplate_normal,
-        )
-        reference_length, _reference_warning = self._ray_length(
-            segmentation.sitk_image,
-            label,
-            reference_entry,
-            optimal_direction,
-        )
-        screw_tip_point = self._estimate_screw_tip_point(
-            points,
-            reference_entry,
-            optimal_direction,
-            reference_length,
-        )
+        frame = self.pedicle_frame(segmentation, level, side)
+        points = self._label_points(segmentation.sitk_image, label, max_points=24000)
+        endplate_normal = np.asarray(frame.endplate_normal, dtype=float)
+        pedicle_midpoint = np.asarray(frame.midpoint, dtype=float)
+        screw_tip_point = np.asarray(frame.screw_tip_point, dtype=float)
 
         # Suter et al. define the adapted trajectory from the surgeon's actual
         # entry point to the fixed screw-tip reference. Prefer EP->STP, but only

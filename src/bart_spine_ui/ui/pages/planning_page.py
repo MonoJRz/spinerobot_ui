@@ -423,7 +423,8 @@ class PlanningPage(WorkflowPage):
         self._sync_screw_table()
 
         if plan is not None:
-            self.workspace.focus_on_physical_point(plan.entry_point, parallel_scale_mm=38.0)
+            focus = plan.pedicle_midpoint or plan.entry_point
+            self.workspace.focus_on_physical_point(focus, parallel_scale_mm=38.0)
             self._show_plan(plan, remember_auto=False)
             return
 
@@ -476,7 +477,8 @@ class PlanningPage(WorkflowPage):
         self._auto_dimensions[key] = (plan.diameter_mm, plan.length_mm)
         self.workspace.set_plans(self.plans, active_key=key)
         self._sync_screw_table()
-        self.workspace.focus_on_physical_point(plan.entry_point, parallel_scale_mm=38.0)
+        focus = plan.pedicle_midpoint or plan.entry_point
+        self.workspace.focus_on_physical_point(focus, parallel_scale_mm=38.0)
         self.left_sidebar.set_target(
             self._target_index,
             len(self._queue),
