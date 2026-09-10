@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import SimpleITK as sitk
 import vtk
@@ -17,6 +18,7 @@ class MedicalVolume:
     sitk_image: sitk.Image
     vtk_image: vtk.vtkImageData
     is_demo: bool = False
+    source_path: Path | None = None
 
     @property
     def size(self) -> tuple[int, int, int]:

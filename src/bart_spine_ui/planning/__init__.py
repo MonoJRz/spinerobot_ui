@@ -1,6 +1,20 @@
-"""
-Pedicle screw planning domain models, algorithms, and validation belong here.
+"""Pedicle screw planning domain models and first-pass geometry algorithms."""
 
-This package is intentionally empty in the starter. Add functionality only when the corresponding
-workflow is implemented; do not put placeholder hardware behavior here.
-"""
+from .models import ScrewPlan, Side
+from .service import (
+    LEVEL_ORDER,
+    STANDARD_DIAMETERS_MM,
+    STANDARD_LENGTHS_MM,
+    PediclePlanningService,
+    parse_levels_of_interest,
+)
+
+__all__ = [
+    "LEVEL_ORDER",
+    "STANDARD_DIAMETERS_MM",
+    "STANDARD_LENGTHS_MM",
+    "PediclePlanningService",
+    "ScrewPlan",
+    "Side",
+    "parse_levels_of_interest",
+]

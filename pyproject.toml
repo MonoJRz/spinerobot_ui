@@ -27,6 +27,11 @@ bart-spine-ui = "bart_spine_ui.application:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"bart_spine_ui.assets.model.src.bart_spine_implant_models" = [
+    "assets/manifest.json", "assets/screws/*.stl", "assets/tulip/*.stl",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

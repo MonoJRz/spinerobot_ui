@@ -6,6 +6,8 @@ from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from ..core import SliceOrientation
 from ..imaging.models import MedicalVolume
 from ..imaging.presets import default_window_level
+from ..segmentation import SegmentationVolume
+from .segmentation_colors import MPR_SEGMENTATION_OPACITY, create_segmentation_lookup_table
 
 
 class MPRPanel(QFrame):
@@ -94,12 +96,70 @@ class MPRPanel(QFrame):
         self.window_level.SetInputConnection(self.reslice.GetOutputPort())
         self.window_level.SetOutputFormatToRGBA()
 
+
+        # Segmentation pipeline
+        self.segmentation_reslice = vtk.vtkImageReslice()
+        self.segmentation_reslice.SetOutputDimensionality(2)
+        self.segmentation_reslice.SetInterpolationModeToNearestNeighbor()
+
+        self.segmentation_colors = vtk.vtkImageMapToColors()
+        self.segmentation_colors.SetLookupTable(
+            create_segmentation_lookup_table(opacity=1.0)
+        )
+        self.segmentation_colors.SetInputConnection(
+            self.segmentation_reslice.GetOutputPort()
+        )
+        self.segmentation_colors.SetOutputFormatToRGBA()
+
+
+        # Blend pipeline
+        self.image_blend = vtk.vtkImageBlend()
+        self.image_blend.SetBlendModeToNormal()
+
+        # CT is always input 0
+        self.image_blend.AddInputConnection(
+            self.window_level.GetOutputPort()
+        )
+        self.image_blend.SetOpacity(0, 1.0)
+
+
+        # Final MPR actor
         self.actor = vtk.vtkImageActor()
-        self.actor.GetMapper().SetInputConnection(self.window_level.GetOutputPort())
+        self.actor.GetMapper().SetInputConnection(
+            self.image_blend.GetOutputPort()
+        )
+
         self._actor_added = False
+        self._has_segmentation = False
 
         self.renderer.GetActiveCamera().ParallelProjectionOn()
         self.interactor.Initialize()
+
+    def set_segmentation(self, segmentation: SegmentationVolume) -> None:
+        self.segmentation_reslice.SetInputData(segmentation.vtk_image)
+
+        if not self._has_segmentation:
+            self.image_blend.AddInputConnection(
+                self.segmentation_colors.GetOutputPort()
+            )
+            self._has_segmentation = True
+
+        self.image_blend.SetOpacity(
+            1,
+            MPR_SEGMENTATION_OPACITY,
+        )
+
+        if self.image is not None:
+            self._update_reslice(self.slider.value())
+            self.image_blend.Update()
+            self.render()
+    def clear_segmentation(self) -> None:
+        if self._has_segmentation:
+            self.image_blend.RemoveInputConnection(0, 1)
+            self._has_segmentation = False
+
+        self.segmentation_reslice.RemoveAllInputs()
+        self.render()
 
     def set_volume(self, volume: MedicalVolume) -> None:
         image = volume.vtk_image
@@ -187,12 +247,26 @@ class MPRPanel(QFrame):
 
         if self.orientation is SliceOrientation.AXIAL:
             position = oz + index * sz
-            axes.DeepCopy((
-                1, 0, 0, cx,
-                0, 1, 0, cy,
-                0, 0, 1, position,
-                0, 0, 0, 1,
-            ))
+            axes.DeepCopy(
+                (
+                    1,
+                    0,
+                    0,
+                    cx,
+                    0,
+                    1,
+                    0,
+                    cy,
+                    0,
+                    0,
+                    1,
+                    position,
+                    0,
+                    0,
+                    0,
+                    1,
+                )
+            )
             self.reslice.SetOutputSpacing(sx, sy, 1.0)
             self.reslice.SetOutputOrigin(
                 -0.5 * (x_count - 1) * sx,
@@ -204,12 +278,26 @@ class MPRPanel(QFrame):
 
         elif self.orientation is SliceOrientation.CORONAL:
             position = oy + index * sy
-            axes.DeepCopy((
-                1, 0, 0, cx,
-                0, 0, 1, position,
-                0, 1, 0, cz,
-                0, 0, 0, 1,
-            ))
+            axes.DeepCopy(
+                (
+                    1,
+                    0,
+                    0,
+                    cx,
+                    0,
+                    0,
+                    1,
+                    position,
+                    0,
+                    1,
+                    0,
+                    cz,
+                    0,
+                    0,
+                    0,
+                    1,
+                )
+            )
             self.reslice.SetOutputSpacing(sx, sz, 1.0)
             self.reslice.SetOutputOrigin(
                 -0.5 * (x_count - 1) * sx,
@@ -221,12 +309,26 @@ class MPRPanel(QFrame):
 
         else:
             position = ox + index * sx
-            axes.DeepCopy((
-                0, 0, 1, position,
-                1, 0, 0, cy,
-                0, 1, 0, cz,
-                0, 0, 0, 1,
-            ))
+            axes.DeepCopy(
+                (
+                    0,
+                    0,
+                    1,
+                    position,
+                    1,
+                    0,
+                    0,
+                    cy,
+                    0,
+                    1,
+                    0,
+                    cz,
+                    0,
+                    0,
+                    0,
+                    1,
+                )
+            )
             self.reslice.SetOutputSpacing(sy, sz, 1.0)
             self.reslice.SetOutputOrigin(
                 -0.5 * (y_count - 1) * sy,
@@ -238,3 +340,16 @@ class MPRPanel(QFrame):
 
         self.reslice.SetResliceAxes(axes)
         self.reslice.Update()
+
+        if self._has_segmentation:
+            self.segmentation_reslice.SetResliceAxes(axes)
+            self.segmentation_reslice.SetOutputSpacing(
+                self.reslice.GetOutputSpacing()
+            )
+            self.segmentation_reslice.SetOutputOrigin(
+                self.reslice.GetOutputOrigin()
+            )
+            self.segmentation_reslice.SetOutputExtent(
+                self.reslice.GetOutputExtent()
+            )
+            self.segmentation_reslice.Update()

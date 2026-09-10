@@ -1,6 +1,8 @@
 from collections import OrderedDict
+from pathlib import Path
 
-from PySide6.QtCore import QDateTime, QTimer, Signal
+from PySide6.QtCore import QDateTime, QTimer, Signal, Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -10,7 +12,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
 from ..workflows import WorkflowPage
 
 
@@ -31,22 +32,43 @@ class ProcedureShell(QWidget):
 
         self.top_bar = QFrame()
         self.top_bar.setObjectName("TopBar")
-        self.top_bar.setFixedHeight(78)
+        self.top_bar.setFixedHeight(86)
         top = QHBoxLayout(self.top_bar)
         top.setContentsMargins(20, 8, 20, 8)
-        top.setSpacing(16)
+        top.setSpacing(12)
 
-        # PLACEHOLDER: Replace this wordmark with the official BART LAB PNG logo.
+        # Official BART LAB logo
         brand = QVBoxLayout()
+        brand.setContentsMargins(0, 0, 0, 0)
         brand.setSpacing(0)
-        title = QLabel("BART LAB")
-        title.setObjectName("BrandTitle")
-        subtitle = QLabel("Precision for a Healthier Tomorrow")
-        subtitle.setObjectName("BrandSubtitle")
-        brand.addWidget(title)
-        brand.addWidget(subtitle)
-        top.addLayout(brand)
-        top.addSpacing(28)
+
+        self.brand_logo = QLabel()
+        self.brand_logo.setObjectName("BrandLogo")
+        self.brand_logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        logo_path = (
+            Path(__file__).resolve().parent.parent
+            / "assets"
+            / "Bartlab_long_logo.png"
+        )
+
+        logo_pixmap = QPixmap(str(logo_path))
+
+        if logo_pixmap.isNull():
+            # Fallback if asset cannot be loaded
+            self.brand_logo.setText("BART LAB")
+        else:
+            self.brand_logo.setPixmap(
+                logo_pixmap.scaledToHeight(
+                    68,
+                    Qt.SmoothTransformation,
+                )
+            )
+
+        self.brand_logo.setFixedHeight(72)
+
+        top.addWidget(self.brand_logo)
+        top.addSpacing(20)
 
         self.stage_row = QHBoxLayout()
         self.stage_row.setSpacing(0)
@@ -100,7 +122,7 @@ class ProcedureShell(QWidget):
         footer_layout.addStretch(1)
 
         # PLACEHOLDER: Replace version text with package/release metadata.
-        product = QLabel("Spinal Surgical Robot    |    Version 0.1.0")
+        product = QLabel("Spinal Surgical Robot   |    Version 0.1.0")
         product.setObjectName("FooterMeta")
         footer_layout.addWidget(product)
         footer_layout.addStretch(1)

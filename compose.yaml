@@ -1,0 +1,41 @@
+services:
+  bart-spine-ui:
+    build:
+      context: .
+      args:
+        TOTALSEGMENTATOR_IMAGE: ${TOTALSEGMENTATOR_IMAGE:-wasserth/totalsegmentator:2.11.0}
+    image: bart-spine-ui:local
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      BART_DATA_DIR: /data
+      BART_TOTALSEG_DEVICE: gpu
+      DISPLAY: ${DISPLAY:-:0}
+      HOME: /cache
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics
+      QT_X11_NO_MITSHM: "1"
+      TOTALSEG_HOME_DIR: /cache/totalsegmentator
+      XAUTHORITY: /tmp/bart-spine.xauth
+      XDG_RUNTIME_DIR: /tmp/bart-runtime
+    volumes:
+      - type: bind
+        source: ${CT_DATA_DIR:-/tmp}
+        target: /data
+      - type: bind
+        source: ${TOTALSEG_CACHE_DIR:-/tmp}
+        target: /cache
+      - type: bind
+        source: /tmp/.X11-unix
+        target: /tmp/.X11-unix
+        read_only: true
+      - type: bind
+        source: ${XAUTH_FILE:-/dev/null}
+        target: /tmp/bart-spine.xauth
+        read_only: true
+    shm_size: "16gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

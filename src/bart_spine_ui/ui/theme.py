@@ -218,6 +218,22 @@ QLabel#StatusWaiting {
     color: #91a6b3;
 }
 
+QProgressBar#SegmentationLoadProgress {
+    background: #101a20;
+    color: #e2edf2;
+    border: 1px solid #35566b;
+    border-radius: 5px;
+    min-height: 20px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QProgressBar#SegmentationLoadProgress::chunk {
+    background: #4385a8;
+    border-radius: 4px;
+}
+
 QComboBox {
     background: #111a20;
     color: #e3ebef;
@@ -343,6 +359,29 @@ QLabel#ViewerMeta {
     font-size: 11px;
 }
 
+QPushButton#ViewModeButton {
+    background: #172b38;
+    color: #9fc9df;
+    border: 1px solid #315a72;
+    border-radius: 5px;
+    min-height: 28px;
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QPushButton#ViewModeButton:checked {
+    background: #126f72;
+    color: white;
+    border-color: #35c6c0;
+}
+
+QPushButton#ViewModeButton:disabled {
+    background: #151b1f;
+    color: #59666e;
+    border-color: #28363f;
+}
+
 QPushButton#ViewerToolButton {
     background: #162734;
     color: #9bc9e3;
@@ -455,5 +494,32 @@ QLabel#FooterReady {
 
 QLabel#FooterWarning {
     color: #e8bd5d;
+}
+
+QPushButton#AcceptPlanningButton, QPushButton#RejectPlanningButton {
+    min-height: 52px;
+    border-radius: 8px;
+    font-size: 25px;
+    font-weight: 800;
+}
+
+QPushButton#AcceptPlanningButton {
+    background: #123f2b;
+    color: #7ee787;
+    border: 1px solid #2e7b50;
+}
+
+QPushButton#AcceptPlanningButton:hover {
+    background: #1b5a3c;
+}
+
+QPushButton#RejectPlanningButton {
+    background: #462126;
+    color: #ff8b91;
+    border: 1px solid #8f4149;
+}
+
+QPushButton#RejectPlanningButton:hover {
+    background: #672d35;
 }
 """

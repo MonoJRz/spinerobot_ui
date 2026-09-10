@@ -16,22 +16,31 @@ class ImagingService:
     """
 
     def load_file(self, path: str | Path) -> MedicalVolume:
-        image, name = read_image_file(path)
-        return self._make_volume(image, name)
+        source_path = Path(path).expanduser().resolve()
+        image, name = read_image_file(source_path)
+        return self._make_volume(image, name, source_path=source_path)
 
     def load_dicom_directory(self, directory: str | Path) -> MedicalVolume:
-        image, name = read_dicom_directory(directory)
-        return self._make_volume(image, name)
+        source_path = Path(directory).expanduser().resolve()
+        image, name = read_dicom_directory(source_path)
+        return self._make_volume(image, name, source_path=source_path)
 
     def create_demo(self) -> MedicalVolume:
         image, name = create_demo_volume()
         return self._make_volume(image, name, is_demo=True)
 
     @staticmethod
-    def _make_volume(image, name: str, *, is_demo: bool = False) -> MedicalVolume:
+    def _make_volume(
+        image,
+        name: str,
+        *,
+        is_demo: bool = False,
+        source_path: Path | None = None,
+    ) -> MedicalVolume:
         return MedicalVolume(
             name=name,
             sitk_image=image,
             vtk_image=sitk_to_vtk(image),
             is_demo=is_demo,
+            source_path=source_path,
         )
