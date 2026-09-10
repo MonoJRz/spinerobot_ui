@@ -4,7 +4,9 @@ from collections.abc import Mapping
 
 import numpy as np
 import vtk
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QImage
+from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from ..core import SliceOrientation
 from ..imaging.models import MedicalVolume
@@ -61,11 +63,26 @@ class PlanningWorkspace(ImagingWorkspace):
         self._layout.setColumnStretch(1, 1)
 
         self.axial_angle_control = TrajectoryTouchOverlay(
-            "AXIAL ANGLE", "↶", "↷", self.axial.vtk_widget
+            "AXIAL ANGLE",
+            "left",
+            "right",
+            self.axial.vtk_widget,
         )
         self.sagittal_angle_control = TrajectoryTouchOverlay(
-            "SAGITTAL ANGLE", "↓", "↑", self.sagittal.vtk_widget
+            "SAGITTAL ANGLE",
+            "down",
+            "up",
+            self.sagittal.vtk_widget,
         )
+        self._angle_control_backgrounds = {
+            panel: self._create_angle_control_background(panel)
+            for panel in self.mpr_views
+        }
+        self._angle_control_background_state = {}
+        self._angle_press = None
+        for panel in self.mpr_views:
+            panel.vtk_widget.installEventFilter(self)
+
         self.axial_angle_control.delta_requested.connect(
             lambda delta: self._adjust_active_angle("axial", delta)
         )
@@ -155,6 +172,7 @@ class PlanningWorkspace(ImagingWorkspace):
             panel.slider.setValue(index)
             self._center_panel_camera(panel, point, parallel_scale_mm)
             panel.render()
+        self._position_angle_controls()
 
     def set_plans(
         self,
@@ -192,6 +210,7 @@ class PlanningWorkspace(ImagingWorkspace):
         self._clear_mpr_overlays()
         self._clear_three_d_overlays()
         self.screw_overlay.clear_plan()
+        self._position_angle_controls()
 
     def _sync_angle_controls(self) -> None:
         plan = self._active_plan
@@ -199,7 +218,8 @@ class PlanningWorkspace(ImagingWorkspace):
         self.sagittal_angle_control.set_angle(
             plan.sagittal_angle_deg if plan is not None else None
         )
-        self._position_angle_controls()
+        self.axial_angle_control.hide()
+        self.sagittal_angle_control.hide()
 
     def _adjust_active_angle(self, orientation: str, delta: float) -> None:
         plan = self._active_plan
@@ -216,15 +236,397 @@ class PlanningWorkspace(ImagingWorkspace):
             max(-35.0, min(35.0, sagittal)),
         )
 
+    @staticmethod
+    def _create_angle_control_background(panel):
+        """One RGBA image actor owns all controller pixels in the VTK framebuffer."""
+        mapper = vtk.vtkImageMapper()
+        mapper.SetColorWindow(255)
+        mapper.SetColorLevel(127.5)
+        actor = vtk.vtkActor2D()
+        actor.SetMapper(mapper)
+        actor.VisibilityOff()
+        actor.PickableOff()
+        panel.renderer.AddViewProp(actor)
+        return actor, mapper
+
+    def _update_angle_control_background(self, panel, control, x: int, y: int) -> bool:
+        widget = panel.vtk_widget
+        actor, mapper = self._angle_control_backgrounds[panel]
+        visible = self._active_plan is not None
+        render_width, render_height = widget.GetRenderWindow().GetSize()
+        state = (x, y, render_width, render_height, control.value.text(), visible)
+        if self._angle_control_background_state.get(panel) == state:
+            return False
+        if render_width <= 0 or render_height <= 0:
+            actor.VisibilityOff()
+            return False
+        self._angle_control_background_state[panel] = state
+        actor.SetVisibility(visible)
+        if not visible:
+            return True
+
+        # Render a hidden Qt template into fresh transparent pixels, never a scan capture.
+        control.ensurePolished()
+        control.layout().activate()
+        image = QImage(control.size(), QImage.Format.Format_RGBA8888)
+        image.fill(Qt.GlobalColor.transparent)
+        control.render(image)
+        scale_x = render_width / widget.width()
+        scale_y = render_height / widget.height()
+        image = image.scaled(
+            max(1, round(control.width() * scale_x)),
+            max(1, round(control.height() * scale_y)),
+        ).convertToFormat(QImage.Format.Format_RGBA8888)
+        pixels = np.frombuffer(image.constBits(), dtype=np.uint8).reshape(
+            image.height(), image.bytesPerLine()
+        )[:, :image.width() * 4].reshape(image.height(), image.width(), 4)
+        pixels = np.ascontiguousarray(pixels[::-1]).reshape(-1, 4)
+        data = vtk.vtkImageData()
+        data.SetDimensions(image.width(), image.height(), 1)
+        data.GetPointData().SetScalars(numpy_to_vtk(pixels, deep=True))
+        mapper.SetInputData(data)
+        actor.SetPosition(round(x * scale_x), render_height - round(y * scale_y) - image.height())
+        return True
+
+    def eventFilter(self, watched, event):
+        for panel, control in (
+            (getattr(self, "axial", None), getattr(self, "axial_angle_control", None)),
+            (getattr(self, "sagittal", None), getattr(self, "sagittal_angle_control", None)),
+        ):
+            if control is None or watched is not panel.vtk_widget:
+                continue
+            if event.type() not in (
+                QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
+                QEvent.Type.MouseButtonDblClick,
+            ) or event.button() != Qt.MouseButton.LeftButton:
+                break
+            local = event.position().toPoint() - control.pos()
+            inside = self._active_plan is not None and control.rect().contains(local)
+            if event.type() == QEvent.Type.MouseButtonPress and inside:
+                self._angle_press = (watched, local)
+                return True
+            if event.type() == QEvent.Type.MouseButtonRelease:
+                pressed = getattr(self, "_angle_press", None)
+                self._angle_press = None
+                if pressed is not None and pressed[0] is watched:
+                    for button in (control.negative_button, control.positive_button):
+                        if inside and button.geometry().contains(local) and button.geometry().contains(
+                            pressed[1]
+                        ):
+                            button.click()
+                            break
+                    return True
+            if inside:
+                return True
+        return super().eventFilter(watched, event)
+
     def _position_angle_controls(self) -> None:
+        """Position angle controls while avoiding the visible screw trajectory."""
+
         for panel, control in (
             (self.axial, self.axial_angle_control),
             (self.sagittal, self.sagittal_angle_control),
         ):
-            x = max(10, (panel.vtk_widget.width() - control.width()) // 2)
-            y = max(10, panel.vtk_widget.height() // 2 - control.height() - 48)
+            widget = panel.vtk_widget
+
+            if widget.width() <= 0 or widget.height() <= 0:
+                continue
+
+            screw_line = self._screw_screen_line(panel)
+
+            control_w = control.width()
+            control_h = control.height()
+
+            margin = 12
+
+            # Keep roughly the same vertical region as the original controller.
+            preferred_y = max(
+                margin,
+                widget.height() // 2 - control_h - 48,
+            )
+
+            center_x = (widget.width() - control_w) // 2
+            right_x = widget.width() - control_w - margin
+            bottom_y = widget.height() - control_h - margin
+
+            # Ordered from most desirable to least desirable.
+            candidates = [
+                # Original-style center position.
+                (center_x, preferred_y),
+
+                # Move horizontally first. This is especially useful for
+                # the axial view where the screw is usually near the center.
+                (margin, preferred_y),
+                (right_x, preferred_y),
+
+                # Upper positions.
+                (center_x, margin),
+                (margin, margin),
+                (right_x, margin),
+
+                # Lower positions as fallback.
+                (center_x, bottom_y),
+                (margin, bottom_y),
+                (right_x, bottom_y),
+            ]
+
+            chosen = None
+
+            for x, y in candidates:
+                x = max(
+                    margin,
+                    min(x, widget.width() - control_w - margin),
+                )
+                y = max(
+                    margin,
+                    min(y, widget.height() - control_h - margin),
+                )
+
+                control_rect = QRectF(
+                    float(x),
+                    float(y),
+                    float(control_w),
+                    float(control_h),
+                )
+
+                if not self._control_intersects_screw(
+                    control_rect,
+                    screw_line,
+                ):
+                    chosen = (x, y)
+                    break
+
+            # Extremely unlikely fallback:
+            # use the position farthest from the screw.
+            if chosen is None:
+                chosen = self._farthest_control_position(
+                    panel,
+                    candidates,
+                    control_w,
+                    control_h,
+                    margin,
+                    screw_line,
+                )
+
+            x, y = int(chosen[0]), int(chosen[1])
+            moved = control.pos() != QPoint(x, y)
+            background_changed = self._update_angle_control_background(
+                panel, control, x, y
+            )
+
+            if moved or background_changed:
+                control.hide()
             control.move(x, y)
-            control.raise_()
+            if moved or background_changed:
+                panel.render()
+            # The Qt template stays hidden; VTK renders its complete RGBA image.
+
+    def _control_intersects_screw(
+        self,
+        control_rect: QRectF,
+        screw_line: QLineF | None,
+    ) -> bool:
+        """Return True if a control would obscure the visible screw."""
+
+        if screw_line is None:
+            return False
+
+        # Extra clearance around the controller so it does not sit directly
+        # against the screw even when there is technically no intersection.
+        clearance = 22.0
+
+        protected_rect = control_rect.adjusted(
+            -clearance,
+            -clearance,
+            clearance,
+            clearance,
+        )
+
+        p1 = screw_line.p1()
+        p2 = screw_line.p2()
+
+        # Endpoint inside controller area.
+        if protected_rect.contains(p1):
+            return True
+
+        if protected_rect.contains(p2):
+            return True
+
+        # Test screw line against all four sides of the protected rectangle.
+        edges = (
+            QLineF(
+                protected_rect.topLeft(),
+                protected_rect.topRight(),
+            ),
+            QLineF(
+                protected_rect.topRight(),
+                protected_rect.bottomRight(),
+            ),
+            QLineF(
+                protected_rect.bottomRight(),
+                protected_rect.bottomLeft(),
+            ),
+            QLineF(
+                protected_rect.bottomLeft(),
+                protected_rect.topLeft(),
+            ),
+        )
+
+        for edge in edges:
+            intersection_type, _point = screw_line.intersects(edge)
+
+            if (
+                intersection_type
+                == QLineF.IntersectionType.BoundedIntersection
+            ):
+                return True
+
+        return False
+
+    def _screw_screen_line(
+        self,
+        panel,
+    ) -> QLineF | None:
+        """Return the currently active screw as a line in Qt widget coordinates."""
+
+        plan = self._active_plan
+
+        if plan is None:
+            return None
+
+        axes = panel.reslice.GetResliceAxes()
+
+        if axes is None:
+            return None
+
+        inverse = vtk.vtkMatrix4x4()
+        vtk.vtkMatrix4x4.Invert(axes, inverse)
+
+        entry_local = self._project_patient_to_slice(
+            inverse,
+            plan.entry_point,
+        )
+
+        endpoint_local = self._project_patient_to_slice(
+            inverse,
+            plan.endpoint,
+        )
+
+        entry_screen = self._slice_to_widget_point(
+            panel,
+            entry_local,
+        )
+
+        endpoint_screen = self._slice_to_widget_point(
+            panel,
+            endpoint_local,
+        )
+
+        if entry_screen is None or endpoint_screen is None:
+            return None
+
+        return QLineF(
+            entry_screen,
+            endpoint_screen,
+        )
+
+    @staticmethod
+    def _slice_to_widget_point(
+        panel,
+        point: tuple[float, float, float],
+    ) -> QPointF | None:
+        """Convert a VTK slice-space point into Qt widget coordinates."""
+
+        renderer = panel.renderer
+        widget = panel.vtk_widget
+
+        renderer.SetWorldPoint(
+            float(point[0]),
+            float(point[1]),
+            float(point[2]),
+            1.0,
+        )
+
+        renderer.WorldToDisplay()
+
+        display = renderer.GetDisplayPoint()
+
+        if display is None:
+            return None
+
+        render_window = widget.GetRenderWindow()
+        render_width, render_height = render_window.GetSize()
+
+        if render_width <= 0 or render_height <= 0:
+            return None
+
+        # VTK uses bottom-left origin.
+        # Qt widgets use top-left origin.
+        x = (
+            float(display[0])
+            * float(widget.width())
+            / float(render_width)
+        )
+
+        y_from_bottom = (
+            float(display[1])
+            * float(widget.height())
+            / float(render_height)
+        )
+
+        y = float(widget.height()) - y_from_bottom
+
+        return QPointF(x, y)
+
+    def _farthest_control_position(
+        self,
+        panel,
+        candidates,
+        control_w: int,
+        control_h: int,
+        margin: int,
+        screw_line: QLineF | None,
+    ) -> tuple[int, int]:
+        """Choose the candidate whose center is farthest from the screw."""
+
+        if screw_line is None:
+            return candidates[0]
+
+        p1 = screw_line.p1()
+        p2 = screw_line.p2()
+
+        screw_mid = QPointF(
+            (p1.x() + p2.x()) / 2.0,
+            (p1.y() + p2.y()) / 2.0,
+        )
+
+        best_position = candidates[0]
+        best_distance_sq = -1.0
+
+        for x, y in candidates:
+            x = max(
+                margin,
+                min(x, panel.vtk_widget.width() - control_w - margin),
+            )
+
+            y = max(
+                margin,
+                min(y, panel.vtk_widget.height() - control_h - margin),
+            )
+
+            cx = x + control_w / 2.0
+            cy = y + control_h / 2.0
+
+            dx = cx - screw_mid.x()
+            dy = cy - screw_mid.y()
+
+            distance_sq = dx * dx + dy * dy
+
+            if distance_sq > best_distance_sq:
+                best_distance_sq = distance_sq
+                best_position = (x, y)
+
+        return best_position
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -310,6 +712,7 @@ class PlanningWorkspace(ImagingWorkspace):
     def _refresh_all_overlays(self) -> None:
         for panel in self.mpr_views:
             self._refresh_mpr_overlay(panel)
+        self._position_angle_controls()
         self._refresh_three_d_overlays()
 
     def _clear_mpr_overlays(self) -> None:
@@ -378,7 +781,7 @@ class PlanningWorkspace(ImagingWorkspace):
         line.SetPoint2(endpoint[0], endpoint[1], 0.0)
         tube = vtk.vtkTubeFilter()
         tube.SetInputConnection(line.GetOutputPort())
-        tube.SetRadius(max(0.7, plan.diameter_mm * 0.22))
+        tube.SetRadius(max(0.7, plan.diameter_mm / 2.0))
         tube.SetNumberOfSides(16)
         tube.CappingOn()
         mapper = vtk.vtkPolyDataMapper()

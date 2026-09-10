@@ -48,8 +48,8 @@ class MainWindow(QMainWindow):
         )
         self.procedure_shell.add_workflow(
             PlaceholderPage(
-                "navigate",
-                "Navigate",
+                "navigation",
+                "Navigation",
                 "Navigation workflow — next development stage",
             )
         )
