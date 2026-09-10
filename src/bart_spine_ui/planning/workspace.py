@@ -8,13 +8,14 @@ from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QImage
 from vtkmodules.util.numpy_support import numpy_to_vtk
 
+from ..assets.model.src.bart_spine_implant_models import make_screw_actor, make_tulip_actor
 from ..core import SliceOrientation
 from ..imaging.models import MedicalVolume
 from ..segmentation import SegmentationVolume
 from ..ui.screw_adjustment_overlay import ScrewAdjustmentOverlay
 from ..ui.trajectory_touch_overlay import TrajectoryTouchOverlay
 from ..visualization import ImagingWorkspace
-from .models import HEAD_DIAMETER_MM, HEAD_HEIGHT_MM, TULIP_SLOT_WIDTH_MM, ScrewPlan, Side
+from .models import ScrewPlan, Side
 
 
 class PlanningWorkspace(ImagingWorkspace):
@@ -828,15 +829,35 @@ class PlanningWorkspace(ImagingWorkspace):
         self._clear_three_d_overlays()
         plan = self._active_plan
         if plan is not None:
-            body = self._cylinder_actor(
-                np.asarray(plan.entry_point, dtype=float),
-                np.asarray(plan.endpoint, dtype=float),
-                radius=max(0.5, plan.diameter_mm / 2.0),
+            body = self._screw_actor(
+                plan,
                 color=(0.20, 0.78, 1.0),
                 opacity=1.0,
             )
             self.three_d.renderer.AddActor(body)
-            tulip_actors = self._tulip_actors(plan, color=(1.0, 0.70, 0.16), opacity=1.0)
+            # Default planning orientation:
+            # keep the tulip groove approximately superior-inferior (+Z in LPS),
+            # while remaining perpendicular to the screw shank.
+            shank = np.asarray(plan.direction, dtype=float)
+            shank /= np.linalg.norm(shank)
+
+            vertical = np.array([0.0, 0.0, 1.0], dtype=float)
+
+            slot_direction = vertical - shank * np.dot(vertical, shank)
+
+            if np.linalg.norm(slot_direction) < 1e-8:
+                # Extremely unusual fallback if the screw is nearly vertical.
+                slot_direction = np.array([0.0, 1.0, 0.0], dtype=float)
+                slot_direction -= shank * np.dot(slot_direction, shank)
+
+            slot_direction /= np.linalg.norm(slot_direction)
+
+            tulip_actors = self._tulip_actors(
+                plan,
+                color=(1.0, 0.70, 0.16),
+                opacity=1.0,
+                slot_direction=slot_direction,
+            )
             for actor in tulip_actors:
                 self.three_d.renderer.AddActor(actor)
             self._three_d_actors.extend((body, *tulip_actors))
@@ -893,62 +914,21 @@ class PlanningWorkspace(ImagingWorkspace):
         actor.PickableOff()
         return actor
 
-    @classmethod
+    @staticmethod
+    def _screw_actor(plan: ScrewPlan, *, color, opacity: float) -> vtk.vtkActor:
+        return make_screw_actor(
+            plan.diameter_mm, plan.length_mm, plan.entry_point, plan.direction,
+            color=color, opacity=opacity,
+        )
+
+    @staticmethod
     def _tulip_actors(
-        cls,
         plan: ScrewPlan,
         *,
         color: tuple[float, float, float],
         opacity: float,
         slot_direction: tuple[float, float, float] | np.ndarray | None = None,
     ) -> list[vtk.vtkActor]:
-        """Build a shank-mounted tulip whose U-slot can rotate independently."""
-
-        entry = np.asarray(plan.entry_point, dtype=float)
-        shank = np.asarray(plan.direction, dtype=float)
-        shank_norm = float(np.linalg.norm(shank))
-        if shank_norm < 1e-8:
-            shank = np.array([0.0, -1.0, 0.0])
-        else:
-            shank /= shank_norm
-
-        housing = cls._cylinder_actor(
-            entry - shank * HEAD_HEIGHT_MM,
-            entry,
-            radius=HEAD_DIAMETER_MM / 2.0,
-            color=color,
-            opacity=opacity,
-        )
-        if slot_direction is None:
-            slot = np.cross(shank, np.array([0.0, 0.0, 1.0]))
-            if float(np.linalg.norm(slot)) < 1e-8:
-                slot = np.cross(shank, np.array([1.0, 0.0, 0.0]))
-        else:
-            slot = np.array(slot_direction, dtype=float, copy=True)
-        # A tulip's U-slot rotates about the shank, so it remains in the plane
-        # normal to that shank even when it follows a curved rod.
-        slot -= shank * float(np.dot(slot, shank))
-        slot_norm = float(np.linalg.norm(slot))
-        if slot_norm < 1e-8:
-            slot = np.cross(shank, np.array([1.0, 0.0, 0.0]))
-            if float(np.linalg.norm(slot)) < 1e-8:
-                slot = np.cross(shank, np.array([0.0, 0.0, 1.0]))
-            slot_norm = float(np.linalg.norm(slot))
-        slot /= slot_norm
-        lateral = np.cross(shank, slot)
-        lateral /= float(np.linalg.norm(lateral))
-
-        seat = entry - shank * (0.70 * HEAD_HEIGHT_MM)
-        rail_half_length = HEAD_DIAMETER_MM * 0.35
-        rail_offset = TULIP_SLOT_WIDTH_MM / 2.0
-        rails = [
-            cls._cylinder_actor(
-                seat - slot * rail_half_length + lateral * offset,
-                seat + slot * rail_half_length + lateral * offset,
-                radius=0.70,
-                color=(0.96, 0.98, 1.0),
-                opacity=opacity,
-            )
-            for offset in (-rail_offset, rail_offset)
-        ]
-        return [housing, *rails]
+        return [make_tulip_actor(
+            plan.entry_point, plan.direction, slot_direction, color=color, opacity=opacity,
+        )]

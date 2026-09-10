@@ -10,6 +10,7 @@ from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from ..imaging.models import MedicalVolume
 from ..imaging.presets import configure_volume_property
 from ..segmentation import SegmentationVolume
+from .lighting import configure_studio_lighting
 from .segmentation_colors import VERTEBRA_LABEL_COUNT, create_segmentation_lookup_table
 
 SEGMENTATION_GAUSSIAN_SIGMA_VOXELS = 1.5
@@ -183,7 +184,7 @@ class Volume3DPanel(QFrame):
         outer.addWidget(hint)
 
         self.renderer = vtk.vtkRenderer()
-        self.renderer.SetBackground(0.035, 0.04, 0.045)
+        configure_studio_lighting(self.renderer)
         self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
 
         self.interactor = self.vtk_widget.GetRenderWindow().GetInteractor()

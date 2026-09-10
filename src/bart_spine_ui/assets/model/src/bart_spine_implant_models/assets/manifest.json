@@ -1,0 +1,1337 @@
+{
+  "package": "bart-spine-implant-models",
+  "version": "0.1.0",
+  "purpose": "Generic visualization meshes for BART Spine planning",
+  "units": "mm",
+  "supported_diameters_mm": [
+    3.0,
+    3.5,
+    4.0,
+    4.5,
+    5.0,
+    5.5,
+    6.0,
+    6.5,
+    7.0,
+    7.5,
+    8.0,
+    8.5,
+    9.0,
+    9.5,
+    10.0
+  ],
+  "supported_lengths_mm": [
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100
+  ],
+  "screw_asset_count": 255,
+  "screw_assets": [
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D3p0_L020.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D3p0_L025.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D3p0_L030.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D3p0_L035.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D3p0_L040.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D3p0_L045.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D3p0_L050.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D3p0_L055.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D3p0_L060.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D3p0_L065.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D3p0_L070.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D3p0_L075.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D3p0_L080.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D3p0_L085.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D3p0_L090.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D3p0_L095.stl"
+    },
+    {
+      "diameter_mm": 3.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D3p0_L100.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D3p5_L020.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D3p5_L025.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D3p5_L030.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D3p5_L035.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D3p5_L040.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D3p5_L045.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D3p5_L050.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D3p5_L055.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D3p5_L060.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D3p5_L065.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D3p5_L070.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D3p5_L075.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D3p5_L080.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D3p5_L085.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D3p5_L090.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D3p5_L095.stl"
+    },
+    {
+      "diameter_mm": 3.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D3p5_L100.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D4p0_L020.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D4p0_L025.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D4p0_L030.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D4p0_L035.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D4p0_L040.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D4p0_L045.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D4p0_L050.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D4p0_L055.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D4p0_L060.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D4p0_L065.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D4p0_L070.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D4p0_L075.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D4p0_L080.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D4p0_L085.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D4p0_L090.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D4p0_L095.stl"
+    },
+    {
+      "diameter_mm": 4.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D4p0_L100.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D4p5_L020.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D4p5_L025.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D4p5_L030.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D4p5_L035.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D4p5_L040.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D4p5_L045.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D4p5_L050.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D4p5_L055.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D4p5_L060.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D4p5_L065.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D4p5_L070.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D4p5_L075.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D4p5_L080.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D4p5_L085.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D4p5_L090.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D4p5_L095.stl"
+    },
+    {
+      "diameter_mm": 4.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D4p5_L100.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D5p0_L020.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D5p0_L025.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D5p0_L030.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D5p0_L035.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D5p0_L040.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D5p0_L045.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D5p0_L050.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D5p0_L055.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D5p0_L060.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D5p0_L065.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D5p0_L070.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D5p0_L075.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D5p0_L080.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D5p0_L085.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D5p0_L090.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D5p0_L095.stl"
+    },
+    {
+      "diameter_mm": 5.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D5p0_L100.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D5p5_L020.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D5p5_L025.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D5p5_L030.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D5p5_L035.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D5p5_L040.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D5p5_L045.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D5p5_L050.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D5p5_L055.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D5p5_L060.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D5p5_L065.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D5p5_L070.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D5p5_L075.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D5p5_L080.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D5p5_L085.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D5p5_L090.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D5p5_L095.stl"
+    },
+    {
+      "diameter_mm": 5.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D5p5_L100.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D6p0_L020.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D6p0_L025.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D6p0_L030.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D6p0_L035.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D6p0_L040.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D6p0_L045.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D6p0_L050.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D6p0_L055.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D6p0_L060.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D6p0_L065.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D6p0_L070.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D6p0_L075.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D6p0_L080.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D6p0_L085.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D6p0_L090.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D6p0_L095.stl"
+    },
+    {
+      "diameter_mm": 6.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D6p0_L100.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D6p5_L020.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D6p5_L025.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D6p5_L030.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D6p5_L035.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D6p5_L040.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D6p5_L045.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D6p5_L050.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D6p5_L055.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D6p5_L060.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D6p5_L065.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D6p5_L070.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D6p5_L075.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D6p5_L080.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D6p5_L085.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D6p5_L090.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D6p5_L095.stl"
+    },
+    {
+      "diameter_mm": 6.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D6p5_L100.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D7p0_L020.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D7p0_L025.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D7p0_L030.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D7p0_L035.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D7p0_L040.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D7p0_L045.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D7p0_L050.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D7p0_L055.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D7p0_L060.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D7p0_L065.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D7p0_L070.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D7p0_L075.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D7p0_L080.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D7p0_L085.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D7p0_L090.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D7p0_L095.stl"
+    },
+    {
+      "diameter_mm": 7.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D7p0_L100.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D7p5_L020.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D7p5_L025.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D7p5_L030.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D7p5_L035.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D7p5_L040.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D7p5_L045.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D7p5_L050.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D7p5_L055.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D7p5_L060.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D7p5_L065.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D7p5_L070.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D7p5_L075.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D7p5_L080.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D7p5_L085.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D7p5_L090.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D7p5_L095.stl"
+    },
+    {
+      "diameter_mm": 7.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D7p5_L100.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D8p0_L020.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D8p0_L025.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D8p0_L030.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D8p0_L035.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D8p0_L040.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D8p0_L045.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D8p0_L050.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D8p0_L055.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D8p0_L060.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D8p0_L065.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D8p0_L070.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D8p0_L075.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D8p0_L080.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D8p0_L085.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D8p0_L090.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D8p0_L095.stl"
+    },
+    {
+      "diameter_mm": 8.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D8p0_L100.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D8p5_L020.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D8p5_L025.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D8p5_L030.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D8p5_L035.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D8p5_L040.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D8p5_L045.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D8p5_L050.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D8p5_L055.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D8p5_L060.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D8p5_L065.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D8p5_L070.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D8p5_L075.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D8p5_L080.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D8p5_L085.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D8p5_L090.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D8p5_L095.stl"
+    },
+    {
+      "diameter_mm": 8.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D8p5_L100.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D9p0_L020.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D9p0_L025.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D9p0_L030.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D9p0_L035.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D9p0_L040.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D9p0_L045.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D9p0_L050.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D9p0_L055.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D9p0_L060.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D9p0_L065.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D9p0_L070.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D9p0_L075.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D9p0_L080.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D9p0_L085.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D9p0_L090.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D9p0_L095.stl"
+    },
+    {
+      "diameter_mm": 9.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D9p0_L100.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D9p5_L020.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D9p5_L025.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D9p5_L030.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D9p5_L035.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D9p5_L040.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D9p5_L045.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D9p5_L050.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D9p5_L055.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D9p5_L060.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D9p5_L065.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D9p5_L070.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D9p5_L075.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D9p5_L080.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D9p5_L085.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D9p5_L090.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D9p5_L095.stl"
+    },
+    {
+      "diameter_mm": 9.5,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D9p5_L100.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 20,
+      "file": "assets/screws/screw_D10p0_L020.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 25,
+      "file": "assets/screws/screw_D10p0_L025.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 30,
+      "file": "assets/screws/screw_D10p0_L030.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 35,
+      "file": "assets/screws/screw_D10p0_L035.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 40,
+      "file": "assets/screws/screw_D10p0_L040.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 45,
+      "file": "assets/screws/screw_D10p0_L045.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 50,
+      "file": "assets/screws/screw_D10p0_L050.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 55,
+      "file": "assets/screws/screw_D10p0_L055.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 60,
+      "file": "assets/screws/screw_D10p0_L060.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 65,
+      "file": "assets/screws/screw_D10p0_L065.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 70,
+      "file": "assets/screws/screw_D10p0_L070.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 75,
+      "file": "assets/screws/screw_D10p0_L075.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 80,
+      "file": "assets/screws/screw_D10p0_L080.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 85,
+      "file": "assets/screws/screw_D10p0_L085.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 90,
+      "file": "assets/screws/screw_D10p0_L090.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 95,
+      "file": "assets/screws/screw_D10p0_L095.stl"
+    },
+    {
+      "diameter_mm": 10.0,
+      "length_mm": 100,
+      "file": "assets/screws/screw_D10p0_L100.stl"
+    }
+  ],
+  "tulip": {
+    "file": "assets/tulip/tulip_head.stl",
+    "head_diameter_mm": 13.0,
+    "head_height_mm": 15.0,
+    "slot_width_mm": 6.0,
+    "generic_rod_diameter_mm": 5.5,
+    "rod_seat_offset_from_entry_mm": 10.5
+  },
+  "coordinate_frame": {
+    "origin": "pedicle entry point / distal tulip plane",
+    "+Z": "screw axis from entry toward tip (into bone)",
+    "+X": "tulip slot / rod tangent direction",
+    "+Y": "right-handed across-slot direction",
+    "tulip_extent": "negative Z",
+    "screw_extent": "positive Z"
+  },
+  "geometry_note": "Thread and tulip details are generic visualization geometry, not a manufacturer-specific implant. Use nominal screw diameter/length for breach and collision calculations."
+}

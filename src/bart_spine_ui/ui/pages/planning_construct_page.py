@@ -399,12 +399,8 @@ class PlanningPage(BasePlanningPage):
             plan = self.plans.get(other_key)
             if plan is None:
                 continue
-            entry = np.asarray(plan.entry_point, dtype=float)
-            endpoint = np.asarray(plan.endpoint, dtype=float)
-            body = self.workspace._cylinder_actor(
-                entry,
-                endpoint,
-                radius=max(0.5, plan.diameter_mm / 2.0),
+            body = self.workspace._screw_actor(
+                plan,
                 color=(0.95, 0.25, 0.30),
                 opacity=0.82,
             )
@@ -588,12 +584,8 @@ class PlanningPage(BasePlanningPage):
             for level, direction in rod.tulip_slot_directions_lps.items()
         }
         for key, plan in ordered_items:
-            entry = np.asarray(plan.entry_point, dtype=float)
-            endpoint = np.asarray(plan.endpoint, dtype=float)
-            body = self.workspace._cylinder_actor(
-                entry,
-                endpoint,
-                radius=max(0.5, plan.diameter_mm / 2.0),
+            body = self.workspace._screw_actor(
+                plan,
                 color=(0.95, 0.30, 0.34) if key in collision_keys else (0.64, 0.78, 0.86),
                 opacity=1.0,
             )

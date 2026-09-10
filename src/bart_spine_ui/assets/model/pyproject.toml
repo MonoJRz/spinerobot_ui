@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bart-spine-implant-models"
+version = "0.1.0"
+description = "Generic pedicle screw and independently rotatable tulip-head models for BART Spine"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26,<3",
+    "vtk>=9.3,<10",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"bart_spine_implant_models" = [
+    "assets/manifest.json",
+    "assets/tulip/*.stl",
+    "assets/screws/*.stl",
+]
