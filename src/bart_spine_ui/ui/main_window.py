@@ -32,6 +32,18 @@ class MainWindow(QMainWindow):
             self.setup_page.set_robot_connected
         )
 
+        self.robot_client.tracking_connection_changed.connect(
+            self.setup_page.set_tracking_connected
+        )
+        marker_setters = {
+            "tool_marker": self.setup_page.set_tool_marker_tracked,
+            "robot_marker": self.setup_page.set_robot_marker_tracked,
+            "patient_marker": self.setup_page.set_patient_marker_tracked,
+        }
+        self.robot_client.marker_changed.connect(
+            lambda frame, tracked: marker_setters[frame](tracked)
+        )
+
         # Optional diagnostic signal.
         self.robot_client.joint_state_changed.connect(
             self._on_joint_state_changed

@@ -6,7 +6,7 @@ TARGET="${1:-$PWD}"
 
 if [[ ! -f "$TARGET/pyproject.toml" || ! -d "$TARGET/src/bart_spine_ui" ]]; then
   echo "Target is not a spinerobot_ui repository root: $TARGET" >&2
-  echo "Usage: ./apply_upgrade.sh /path/to/bart_spine_ui" >&2
+  echo "Usage: ./apply_upgrade.sh /path/to/spinerobot_ui" >&2
   exit 1
 fi
 

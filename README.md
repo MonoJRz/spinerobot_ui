@@ -29,7 +29,7 @@ navigation can be added as independent features instead of accumulating inside o
 ## Project layout
 
 ```text
-bart_spine_ui_starter/
+spinerobot_ui/
 ├── pyproject.toml
 ├── requirements.txt
 ├── run.py
@@ -73,7 +73,7 @@ bart_spine_ui_starter/
 ## Install
 
 ```bash
-cd ~/bart_spine_ui_starter
+cd ~/Workspace/spinerobot_ui
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -208,3 +208,16 @@ Imaging / Planning / Registration / Robot adapters
 ```
 
 See `docs/ARCHITECTURE.md` before adding major features.
+
+### ROS2 and NDI status
+
+For the native UI with the sibling `spinerobot_ros2` workspace built, run
+`./run-ui.sh` (or `bart_ui` on the lab workstation). This sources ROS Jazzy and
+that workspace before starting the UI, using ROS domain 42.
+
+Start NDI with `../spinerobot_ros2/launchers/start_ndi.sh`, or from the robot
+console. The setup page receives `/tracking/status`: NDI connection is based on
+heartbeat arrival, while tool, robot, and patient markers require visible,
+valid, fresh status. After one second without updates, the connection shows
+“No heartbeat” and stale markers become “Not tracked”. Occluded markers do not
+disconnect the NDI system. Only one process should own the tracker serial port.

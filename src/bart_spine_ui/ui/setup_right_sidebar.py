@@ -62,7 +62,7 @@ class SetupRightSidebar(QFrame):
         self.case_status = self._compact_status("Case")
         self.ct_status = self._compact_status("Clinical CT")
         self.robot_status = self._compact_status("Robot")
-        self.tracking_status = self._compact_status("Tracking system")
+        self.tracking_status = self._compact_status("NDI tracking")
         self.patient_status = self._compact_status("Patient marker")
         for indicator in (
             self.case_status,
@@ -202,7 +202,7 @@ class SetupRightSidebar(QFrame):
         self._stamp(self.robot_status, connected is not None)
 
     def set_tracking_connected(self, connected: bool | None) -> None:
-        self.tracking_status.set_connected(connected)
+        self.tracking_status.set_connected(connected, unavailable="No heartbeat")
         self._stamp(self.tracking_status, connected is not None)
 
     def set_patient_marker_tracked(self, tracked: bool | None) -> None:

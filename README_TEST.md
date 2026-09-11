@@ -20,7 +20,7 @@ This ZIP is an **overlay package for the current `MonoJRz/spinerobot_ui` `feat/s
 ## Apply to your branch
 
 ```bash
-cd ~/bart_spine_ui
+cd ~/Workspace/spinerobot_ui
 git switch feat/segmentation
 
 # Optional safety snapshot
@@ -28,7 +28,7 @@ git status
 git add -A && git commit -m "checkpoint before planning workflow upgrade"
 
 # Unzip this package over the repository root
-unzip -o ~/Downloads/spinerobot_planning_upgrade.zip -d ~/bart_spine_ui
+unzip -o ~/Downloads/spinerobot_planning_upgrade.zip -d ~/Workspace/spinerobot_ui
 
 source .venv/bin/activate
 pip install -e .
