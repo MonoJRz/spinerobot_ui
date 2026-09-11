@@ -16,6 +16,7 @@ from ..ui.screw_adjustment_overlay import ScrewAdjustmentOverlay
 from ..ui.trajectory_touch_overlay import TrajectoryTouchOverlay
 from ..visualization import ImagingWorkspace
 from .models import ScrewPlan, Side
+from .slice_intersection import screw_slice_intersection
 
 
 class PlanningWorkspace(ImagingWorkspace):
@@ -757,58 +758,25 @@ class PlanningWorkspace(ImagingWorkspace):
             panel.render()
             return
 
-        entry = self._project_patient_to_slice(inverse, plan.entry_point)
-        endpoint = self._project_patient_to_slice(inverse, plan.endpoint)
-
-        direction = np.asarray(plan.direction, dtype=float)
-        guide_start = np.asarray(plan.entry_point, dtype=float) - direction * 70.0
-        guide_end = np.asarray(plan.entry_point, dtype=float) + direction * 130.0
-        guide_start_local = self._project_patient_to_slice(inverse, tuple(guide_start))
-        guide_end_local = self._project_patient_to_slice(inverse, tuple(guide_end))
-        guide = vtk.vtkLineSource()
-        guide.SetPoint1(guide_start_local[0], guide_start_local[1], 0.08)
-        guide.SetPoint2(guide_end_local[0], guide_end_local[1], 0.08)
-        guide_mapper = vtk.vtkPolyDataMapper()
-        guide_mapper.SetInputConnection(guide.GetOutputPort())
-        guide_actor = vtk.vtkActor()
-        guide_actor.SetMapper(guide_mapper)
-        guide_actor.GetProperty().SetColor(1.0, 0.16, 0.12)
-        guide_actor.GetProperty().SetLineWidth(2.0)
-        guide_actor.PickableOff()
-        panel.renderer.AddActor(guide_actor)
-
-        line = vtk.vtkLineSource()
-        line.SetPoint1(entry[0], entry[1], 0.0)
-        line.SetPoint2(endpoint[0], endpoint[1], 0.0)
-        tube = vtk.vtkTubeFilter()
-        tube.SetInputConnection(line.GetOutputPort())
-        tube.SetRadius(max(0.7, plan.diameter_mm / 2.0))
-        tube.SetNumberOfSides(16)
-        tube.CappingOn()
-        mapper = vtk.vtkPolyDataMapper()
-        mapper.SetInputConnection(tube.GetOutputPort())
-        body = vtk.vtkActor()
-        body.SetMapper(mapper)
-        body.GetProperty().SetColor(0.20, 0.78, 1.0)
-        body.GetProperty().SetOpacity(0.90)
-        body.PickableOff()
-        panel.renderer.AddActor(body)
-
-        marker = vtk.vtkRegularPolygonSource()
-        marker.SetNumberOfSides(32)
-        marker.SetRadius(max(2.0, plan.diameter_mm * 0.7))
-        marker.SetCenter(entry[0], entry[1], 0.15)
-        marker.GeneratePolygonOff()
-        marker_mapper = vtk.vtkPolyDataMapper()
-        marker_mapper.SetInputConnection(marker.GetOutputPort())
-        entry_actor = vtk.vtkActor()
-        entry_actor.SetMapper(marker_mapper)
-        entry_actor.GetProperty().SetColor(1.0, 0.78, 0.22)
-        entry_actor.GetProperty().SetLineWidth(2.5)
-        entry_actor.PickableOff()
-        panel.renderer.AddActor(entry_actor)
-
-        self._mpr_overlay_actors[panel].extend((guide_actor, body, entry_actor))
+        section, outline = screw_slice_intersection(plan, axes)
+        # Draw only the envelope touching this slice, without projected guides.
+        for geometry, opacity, depth in ((section, 0.25, 0.02), (outline, 1.0, 0.03)):
+            if geometry.GetNumberOfCells() == 0:
+                continue
+            mapper = vtk.vtkPolyDataMapper()
+            mapper.SetInputData(geometry)
+            mapper.ScalarVisibilityOff()
+            actor = vtk.vtkActor()
+            actor.SetMapper(mapper)
+            # Display-only offset avoids z-fighting with the CT slice.
+            actor.SetPosition(0, 0, depth)
+            actor.GetProperty().SetColor(0.20, 0.78, 1.0)
+            actor.GetProperty().SetOpacity(opacity)
+            actor.GetProperty().SetLineWidth(2.0)
+            actor.GetProperty().LightingOff()
+            actor.PickableOff()
+            panel.renderer.AddActor(actor)
+            self._mpr_overlay_actors[panel].append(actor)
         panel.render()
 
     @staticmethod
