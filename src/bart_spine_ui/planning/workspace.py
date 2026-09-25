@@ -16,7 +16,7 @@ from ..ui.screw_adjustment_overlay import ScrewAdjustmentOverlay
 from ..ui.trajectory_touch_overlay import TrajectoryTouchOverlay
 from ..visualization import ImagingWorkspace
 from .models import ScrewPlan, Side
-from .slice_intersection import screw_slice_intersection
+from .slice_intersection import screw_alignment_guide, screw_slice_intersection
 
 
 class PlanningWorkspace(ImagingWorkspace):
@@ -140,7 +140,7 @@ class PlanningWorkspace(ImagingWorkspace):
 
     def clear_segmentation(self) -> None:
         self._segmentation = None
-        self._marking_entry = False
+        self.begin_entry_point_marking(False)
         self.clear_plans()
         super().clear_segmentation()
 
@@ -759,7 +759,7 @@ class PlanningWorkspace(ImagingWorkspace):
             return
 
         section, outline = screw_slice_intersection(plan, axes)
-        # Draw only the envelope touching this slice, without projected guides.
+        # The blue envelope remains restricted to the actual slice intersection.
         for geometry, opacity, depth in ((section, 0.25, 0.02), (outline, 1.0, 0.03)):
             if geometry.GetNumberOfCells() == 0:
                 continue
@@ -777,6 +777,23 @@ class PlanningWorkspace(ImagingWorkspace):
             actor.PickableOff()
             panel.renderer.AddActor(actor)
             self._mpr_overlay_actors[panel].append(actor)
+        if panel.orientation in (SliceOrientation.AXIAL, SliceOrientation.SAGITTAL):
+            guide = screw_alignment_guide(plan, axes)
+            if guide.GetNumberOfCells():
+                mapper = vtk.vtkPolyDataMapper()
+                mapper.SetInputData(guide)
+                mapper.ScalarVisibilityOff()
+                actor = vtk.vtkActor()
+                actor.SetMapper(mapper)
+                actor.SetPosition(0, 0, 0.04)
+                actor.GetProperty().SetColor(1.0, 0.12, 0.12)
+                actor.GetProperty().SetOpacity(0.65)
+                actor.GetProperty().SetLineWidth(3.0)
+                actor.GetProperty().LightingOff()
+                actor.UseBoundsOff()
+                actor.PickableOff()
+                panel.renderer.AddActor(actor)
+                self._mpr_overlay_actors[panel].append(actor)
         panel.render()
 
     @staticmethod

@@ -329,6 +329,19 @@ class PlanningPage(BasePlanningPage):
         self.construct_review.confirm_requested.connect(self._confirm_construct)
         self._rod_plans: dict[Side, RodPlan | None] = {"left": None, "right": None}
 
+    def _reset_volume_state(self) -> None:
+        super()._reset_volume_state()
+        # The base constructor can receive a volume before the review widget exists.
+        if not hasattr(self, "construct_review"):
+            return
+        self._rod_plans = {"left": None, "right": None}
+        self.construct_review.set_construct([], set(), self._rod_plans)
+        self.construct_review.hide()
+        self.left_sidebar.set_three_d_view(self.workspace.three_d)
+        self.left_sidebar.show()
+        self.workspace.show()
+        self.screw_table.show()
+
     def _activate_target(self) -> None:
         super()._activate_target()
         self._refresh_current_collision_status()

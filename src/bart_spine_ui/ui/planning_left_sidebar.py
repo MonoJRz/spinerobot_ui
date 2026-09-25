@@ -279,6 +279,18 @@ class PlanningLeftSidebar(QFrame):
             else:
                 button.setStyleSheet("")
 
+    def reset_planning(self) -> None:
+        self._active_key = None
+        self.set_marking(False)
+        self.set_completed(set())
+        self.clear_plan_measurements()
+        self.target_label.setText("—")
+        self.target_label.setToolTip("")
+        self.set_running(False)
+        self.set_loading(False)
+        self.set_segmentation_ready(False)
+        self.set_status("Run segmentation to begin planning.", "waiting")
+
     def set_running(self, running: bool) -> None:
         self._running = running
         self._sync_action_state()

@@ -45,6 +45,7 @@ class ImagingWorkspace(QWidget):
         return self.axial, self.coronal, self.sagittal
 
     def set_volume(self, volume: MedicalVolume) -> None:
+        self.clear_segmentation()
         for view in self.mpr_views:
             view.set_volume(volume)
         self.three_d.set_volume(volume)

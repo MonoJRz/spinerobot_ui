@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QMainWindow
 
 from ..controllers import ImagingController
 from ..robot.ros_client import RobotRosClient
+from .cad_export_dialog import CadExportDialog
 from .pages.imaging_page import ImagingPage
 from .pages.placeholder_page import PlaceholderPage
 from .pages.planning_construct_page import PlanningPage
@@ -23,6 +24,8 @@ class MainWindow(QMainWindow):
 
         # Build UI first so setup_page exists before ROS signals are connected.
         self._register_workflows()
+        self.cad_export_dialog = CadExportDialog(self.planning_page, self)
+        self.procedure_shell.cad_export_requested.connect(self._show_cad_export)
 
         # Shared ROS 2 robot client.
         self.robot_client = RobotRosClient(parent=self)
@@ -84,7 +87,8 @@ class MainWindow(QMainWindow):
 
         # Planning consumes the Region already shown in CASE INFORMATION.
         self.planning_page.set_case_region(
-            self.setup_page.right_sidebar.case_values["Region"].text()
+            self.setup_page.right_sidebar.case_values["Region"].text(),
+            self.setup_page.right_sidebar.case_values["Anatomy"].text()
         )
 
         self.setup_page.right_sidebar.case_changed.connect(
@@ -93,7 +97,7 @@ class MainWindow(QMainWindow):
                    _anatomy,
                    region,
                    _patient:
-            self.planning_page.set_case_region(region)
+            self.planning_page.set_case_region(region, _anatomy)
         )
 
         self.procedure_shell.add_workflow(
@@ -112,6 +116,12 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def _show_cad_export(self):
+        self.cad_export_dialog.refresh_state()
+        self.cad_export_dialog.show()
+        self.cad_export_dialog.raise_()
+        self.cad_export_dialog.activateWindow()
+
     def _on_joint_state_changed(self, state):
         """
         Joint-state communication is intentionally received here,
@@ -127,6 +137,7 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
+        self.cad_export_dialog.stop_export()
         if hasattr(self, "robot_client"):
             self.robot_client.shutdown()
 

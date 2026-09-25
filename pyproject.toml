@@ -16,6 +16,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cad = [
+    "cadquery-ocp>=7.9.3.1.1,<8",
+    "trimesh>=4,<6",
+]
+
 dev = [
     "pytest>=8",
     "ruff>=0.6",

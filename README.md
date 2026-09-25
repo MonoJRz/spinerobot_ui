@@ -221,3 +221,27 @@ heartbeat arrival, while tool, robot, and patient markers require visible,
 valid, fresh status. After one second without updates, the connection shows
 “No heartbeat” and stale markers become “Not tracked”. Occluded markers do not
 disconnect the NDI system. Only one process should own the tracker serial port.
+
+### Smoothed CAD model export
+
+With a CT and segmentation loaded in Planning, open **Settings (⚙) → Export CAD model…** and click **Save CAD model…**. Choose a parent folder. The exporter creates a new timestamped folder containing a named STEP assembly, individual STEP/STL parts, a GLB/OBJ preview, full UI-resolution bone meshes, the plan snapshot, and a validation report.
+
+The exporter shares the 3D view's per-label Gaussian surface extraction. Each vertebra, screw shaft, and head remains separate in patient LPS millimetres. It captures all current screws, including drafts, so later edits or switching cases do not change an export already running. Generic screw geometry preserves the saved dimensions and trajectories. Heads use a default superior-facing slot; rods are not exported.
+
+Processing runs in a separate process and can be cancelled. Closing the export dialog also cancels an active job. The final folder appears only after the STEP assembly has been reopened and validated; existing folders are not overwritten. CAD bones remain faceted solids with approximately 12,000 triangles per vertebra; the full smoothed viewer surfaces are included separately.
+
+Install the optional CAD backend in the application's environment:
+
+```bash
+python -m pip install -e '.[cad]'
+```
+
+For a separate environment containing the application dependencies and CAD backend, set `BART_CAD_PYTHON` to that environment's Python executable before launching the UI.
+
+Run export and smoothing checks after sourcing the normal ROS/application environment:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 QT_QPA_PLATFORM=offscreen python -m pytest tests/test_cad_export.py tests/test_segmentation_volume.py -q
+```
+
+Disabling pytest plugin autoload avoids the unrelated ROS `launch_testing` plugin's incompatibility with newer pytest versions.

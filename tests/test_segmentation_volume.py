@@ -122,3 +122,82 @@ def test_camera_is_reset_to_posterior_lps_view():
     assert position[2] == pytest.approx(focal_point[2])
     assert camera.GetDirectionOfProjection() == pytest.approx((0.0, -1.0, 0.0))
     assert camera.GetViewUp() == pytest.approx((0.0, 0.0, 1.0))
+
+
+def test_prepare_run_uses_robust_crop(tmp_path, monkeypatch):
+    service = TotalSegmentatorService(device="cpu")
+    monkeypatch.setattr(service, "_resolve_executable", lambda: "/test/TotalSegmentator")
+    run = service.prepare_run(_reference_volume(tmp_path))
+    assert "--robust_crop" in run.arguments
+    assert "--fast" not in run.arguments
+    first_roi = run.arguments.index("--roi_subset") + 1
+    assert run.arguments[first_roi:first_roi + len(THORACIC_LUMBAR_ROIS)] == list(
+        THORACIC_LUMBAR_ROIS
+    )
+
+
+def test_overlapping_lumbar_masks_keep_single_labels_on_ct_grid(tmp_path):
+    reference = _reference_volume(tmp_path)
+    for roi in THORACIC_LUMBAR_ROIS:
+        array = np.zeros((3, 4, 4), dtype=np.float32)
+        if roi == "vertebrae_L2":
+            array[1, 1, 1:3] = 0.5
+        elif roi == "vertebrae_L3":
+            array[1, 1, 1:3] = 256
+        mask = sitk.GetImageFromArray(array)
+        mask.CopyInformation(reference.sitk_image)
+        if roi == "vertebrae_L3":
+            mask.SetOrigin(reference.sitk_image.TransformIndexToPhysicalPoint((1, 0, 0)))
+        sitk.WriteImage(mask, str(tmp_path / f"{roi}.nii.gz"))
+
+    result = TotalSegmentatorService().load_from_directory(tmp_path, reference)
+    labels = sitk.GetArrayFromImage(result.sitk_image)
+    expected = np.zeros_like(labels)
+    expected[1, 1, 1] = 14  # L2-only voxel survives.
+    expected[1, 1, 2:4] = 15  # L3 wins the shared voxel without adding label IDs.
+    np.testing.assert_array_equal(labels, expected)
+    assert result.sitk_image.GetPixelID() == sitk.sitkUInt16
+    assert result.sitk_image.GetOrigin() == reference.sitk_image.GetOrigin()
+    assert result.sitk_image.GetDirection() == reference.sitk_image.GetDirection()
+
+
+@pytest.mark.parametrize(
+    "anatomy,levels,lumbar_only",
+    [
+        ("Lumbar Spine", ["L3", "L4", "L5"], True),
+        ("Lumbar", [], True),
+        (None, ["L1", "L2"], True),
+        ("Thoracolumbar Spine", ["T12", "L1"], False),
+        ("Lumbar Spine", ["T12", "L1"], False),
+        ("Thoracic", [], False),
+        (None, [], False),
+    ],
+)
+def test_case_segmentation_subset(anatomy, levels, lumbar_only):
+    from bart_spine_ui.segmentation.totalsegmentator_service import LUMBAR_ROIS, rois_for_case
+
+    assert rois_for_case(anatomy, levels) == (
+        LUMBAR_ROIS if lumbar_only else THORACIC_LUMBAR_ROIS
+    )
+
+
+def test_lumbar_run_and_loading_do_not_require_thoracic_masks(tmp_path, monkeypatch):
+    from bart_spine_ui.segmentation.totalsegmentator_service import LUMBAR_ROIS
+
+    service = TotalSegmentatorService(device="cpu")
+    monkeypatch.setattr(service, "_resolve_executable", lambda: "/test/TotalSegmentator")
+    reference = _reference_volume(tmp_path)
+    run = service.prepare_run(reference, rois=LUMBAR_ROIS)
+    first_roi = run.arguments.index("--roi_subset") + 1
+    assert run.arguments[first_roi:run.arguments.index("--device")] == list(LUMBAR_ROIS)
+    assert len(run.expected_masks) == 5
+    for index, path in enumerate(run.expected_masks):
+        array = np.zeros((3, 4, 4), dtype=np.uint8)
+        array.flat[index] = 1
+        mask = sitk.GetImageFromArray(array)
+        mask.CopyInformation(reference.sitk_image)
+        sitk.WriteImage(mask, str(path))
+    assert service.missing_masks(run) == []
+    result = service.load_result(run, reference)
+    assert result.labels == {13 + index: f"L{index + 1}" for index in range(5)}
+    assert set(np.unique(sitk.GetArrayFromImage(result.sitk_image))) == {0, 13, 14, 15, 16, 17}

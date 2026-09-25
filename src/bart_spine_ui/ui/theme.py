@@ -522,4 +522,38 @@ QPushButton#RejectPlanningButton {
 QPushButton#RejectPlanningButton:hover {
     background: #672d35;
 }
+
+QMenu#SettingsMenu {
+    background: #141b20;
+    color: #dce4e9;
+    border: 1px solid #365a70;
+    padding: 5px;
+}
+QMenu#SettingsMenu::item {
+    padding: 10px 18px;
+}
+QMenu#SettingsMenu::item:selected {
+    background: #183a52;
+}
+QDialog#CadExportDialog {
+    background: #141b20;
+}
+QDialog#CadExportDialog QLabel {
+    background: transparent;
+    padding: 6px 0;
+}
+QDialog#CadExportDialog QPushButton:disabled {
+    background: #202c34;
+    color: #8195a1;
+    border-color: #36505f;
+}
+QDialog#CadExportDialog QProgressBar {
+    background: #0d1418;
+    border: 1px solid #365a70;
+    border-radius: 4px;
+    height: 12px;
+}
+QDialog#CadExportDialog QProgressBar::chunk {
+    background: #35c6c0;
+}
 """

@@ -1,17 +1,19 @@
 from collections import OrderedDict
 from pathlib import Path
 
-from PySide6.QtCore import QDateTime, QTimer, Signal, Qt
+from PySide6.QtCore import QDateTime, Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
+
 from ..workflows import WorkflowPage
 
 
@@ -19,6 +21,7 @@ class ProcedureShell(QWidget):
     """Procedure shell with workflow navigation and persistent system context."""
 
     stage_changed = Signal(str)
+    cad_export_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -74,12 +77,19 @@ class ProcedureShell(QWidget):
         self.stage_row.setSpacing(0)
         top.addLayout(self.stage_row, 1)
 
-        # PLACEHOLDER: Connect settings and help buttons when those dialogs exist.
-        for symbol, tooltip in (("⚙", "Settings"), ("?", "Help")):
-            button = QPushButton(symbol)
-            button.setObjectName("UtilityButton")
-            button.setToolTip(tooltip)
-            top.addWidget(button)
+        self.settings_button = QPushButton("⚙")
+        self.settings_button.setObjectName("UtilityButton")
+        self.settings_button.setToolTip("Settings")
+        self.settings_menu = QMenu(self.settings_button)
+        self.settings_menu.setObjectName("SettingsMenu")
+        self.export_cad_action = self.settings_menu.addAction("Export CAD model…")
+        self.export_cad_action.triggered.connect(self.cad_export_requested.emit)
+        self.settings_button.setMenu(self.settings_menu)
+        top.addWidget(self.settings_button)
+        help_button = QPushButton("?")
+        help_button.setObjectName("UtilityButton")
+        help_button.setToolTip("Help")
+        top.addWidget(help_button)
 
         time_divider = QFrame()
         time_divider.setObjectName("HeaderDivider")

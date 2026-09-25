@@ -15,6 +15,7 @@ from ...segmentation import (
     SegmentationVolume,
     TotalSegmentatorService,
 )
+from ...segmentation.totalsegmentator_service import rois_for_case
 from ...workflows import WorkflowPage
 from ..planning_left_sidebar import PlanningLeftSidebar
 from ..screw_table_panel import ScrewTablePanel
@@ -27,11 +28,12 @@ class SegmentationLoadWorker(QThread):
     result_ready = Signal(object)
     load_failed = Signal(str)
 
-    def __init__(self, service, output_dir, volume, parent=None):
+    def __init__(self, service, output_dir, volume, parent=None, *, rois=THORACIC_LUMBAR_ROIS):
         super().__init__(parent)
         self.service = service
         self.output_dir = output_dir
         self.volume = volume
+        self.rois = rois
 
     def run(self) -> None:
         try:
@@ -39,6 +41,7 @@ class SegmentationLoadWorker(QThread):
                 self.output_dir,
                 self.volume,
                 progress_callback=self.progress_changed.emit,
+                rois=self.rois,
             )
         except Exception as exc:  # noqa: BLE001 -- forward service errors to the UI
             self.load_failed.emit(str(exc))
@@ -47,7 +50,7 @@ class SegmentationLoadWorker(QThread):
 
 
 class PlanningPage(WorkflowPage):
-    """Level-by-level pedicle screw planning on synchronized T1-L5 segmentation."""
+    """Level-by-level pedicle screw planning on synchronized vertebra segmentation."""
 
     def __init__(
         self,
@@ -64,12 +67,15 @@ class PlanningPage(WorkflowPage):
         self.planning_service = planning_service or PediclePlanningService()
         self.current_run: SegmentationRun | None = None
         self.current_segmentation: SegmentationVolume | None = None
+        self._loaded_volume: MedicalVolume | None = None
         self._displayed_volume: MedicalVolume | None = None
         self._run_volume: MedicalVolume | None = None
         self._running = False
         self._active = False
         self._load_workers: set[SegmentationLoadWorker] = set()
 
+        self.case_anatomy: str | None = None
+        self.segmentation_rois = THORACIC_LUMBAR_ROIS
         self.case_region: str | None = None
         self.levels_of_interest: list[str] = []
         self._queue: list[tuple[str, Side]] = []
@@ -136,9 +142,17 @@ class PlanningPage(WorkflowPage):
         self.workspace.begin_entry_point_marking(False)
         self.left_sidebar.set_marking(False)
 
-    def set_case_region(self, region: str | None) -> None:
+    def set_case_region(self, region: str | None, anatomy: str | None = None) -> None:
         self.case_region = region.strip() if region and region.strip() else None
+        if anatomy is not None:
+            self.case_anatomy = anatomy
         parsed = parse_levels_of_interest(self.case_region)
+        rois = rois_for_case(self.case_anatomy or self.case_region, parsed)
+        subset_changed = rois != self.segmentation_rois
+        if subset_changed:
+            self.segmentation_rois = rois
+            self._reset_volume_state()
+            self._displayed_volume = None
         self.levels_of_interest = parsed
         self.left_sidebar.set_case_region(self.case_region, parsed)
         if parsed:
@@ -153,28 +167,52 @@ class PlanningPage(WorkflowPage):
             self._target_index = 0
             self._prepare_planning_queue()
 
+        if subset_changed and self.controller.current_volume is not None:
+            self._on_volume_loaded(self.controller.current_volume)
+
+    def _reset_volume_state(self) -> None:
+        # Invalidate the run before stopping it: QProcess can emit callbacks while waiting.
+        run = self.current_run
+        self.current_run = None
+        self._run_volume = None
+        self._running = False
+        if self.process.state() != QProcess.ProcessState.NotRunning:
+            self.process.kill()
+            self.process.waitForFinished()
+        if run is not None:
+            self.segmentation_service.cleanup(run)
+        self.current_segmentation = None
+        self.plans.clear()
+        self.accepted.clear()
+        self._auto_dimensions.clear()
+        self._queue.clear()
+        self._target_index = 0
+        self.workspace.clear_segmentation()
+        self.left_sidebar.reset_planning()
+        self.screw_table.clear()
+
     def _on_volume_loaded(self, volume: MedicalVolume) -> None:
-        if not self._active:
-            self.left_sidebar.set_ct(volume.name)
-            output_dir = (
-                self.segmentation_service.output_directory(volume.source_path)
-                if volume.source_path is not None
-                else None
-            )
-            self.left_sidebar.set_output_directory(
-                str(output_dir) if output_dir is not None else None
-            )
-            return
+        if volume is not self._loaded_volume:
+            self._loaded_volume = volume
+            self._displayed_volume = None
+            self._reset_volume_state()
 
         output_dir = (
             self.segmentation_service.output_directory(volume.source_path)
             if volume.source_path is not None
             else None
         )
+        self.left_sidebar.set_ct(volume.name)
+        self.left_sidebar.set_output_directory(
+            str(output_dir) if output_dir is not None else None
+        )
+        if not self._active:
+            return
+
         has_existing_segmentation = (
             volume is not self._displayed_volume
             and output_dir is not None
-            and all((output_dir / f"{roi}.nii.gz").is_file() for roi in THORACIC_LUMBAR_ROIS)
+            and all((output_dir / f"{roi}.nii.gz").is_file() for roi in self.segmentation_rois)
         )
         if has_existing_segmentation:
             self.left_sidebar.set_loading(True)
@@ -187,17 +225,7 @@ class PlanningPage(WorkflowPage):
             if not has_existing_segmentation:
                 self.left_sidebar.set_loading(False)
             self._displayed_volume = volume
-            self.current_segmentation = None
-            self.plans.clear()
-            self.accepted.clear()
-            self._auto_dimensions.clear()
-            self._queue.clear()
-            self._target_index = 0
-            self.workspace.clear_segmentation()
             self.workspace.set_volume(volume)
-            self.left_sidebar.set_completed(set())
-            self.left_sidebar.clear_plan_measurements()
-            self.screw_table.clear()
 
         self.left_sidebar.set_ct(volume.name)
         self.left_sidebar.set_case_region(self.case_region, self.levels_of_interest)
@@ -224,7 +252,7 @@ class PlanningPage(WorkflowPage):
             return
 
         try:
-            run = self.segmentation_service.prepare_run(volume)
+            run = self.segmentation_service.prepare_run(volume, rois=self.segmentation_rois)
         except Exception as exc:  # noqa: BLE001
             self._show_error(str(exc))
             return
@@ -240,15 +268,17 @@ class PlanningPage(WorkflowPage):
         self.left_sidebar.set_segmentation_ready(False)
         self._running = True
         self.left_sidebar.set_running(True)
-        self.left_sidebar.set_status("Starting full-resolution T1-L5 segmentation...", "waiting")
+        self.left_sidebar.set_status("Starting full-resolution vertebra segmentation...", "waiting")
         self.left_sidebar.set_output_directory(str(run.output_dir))
-        self.status_changed.emit("TotalSegmentator — T1-L5 segmentation started")
+        self.status_changed.emit("TotalSegmentator — vertebra segmentation started")
 
         self.process.setProgram(run.executable)
         self.process.setArguments(run.arguments)
         self.process.start()
 
     def _on_process_output(self) -> None:
+        if self._run_volume is not self.controller.current_volume or not self._running:
+            return
         text = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if lines:
@@ -258,7 +288,6 @@ class PlanningPage(WorkflowPage):
         run = self.current_run
         volume = self._run_volume
         if run is None or volume is None:
-            self._finish_ui()
             return
 
         self.segmentation_service.cleanup(run)
@@ -273,7 +302,7 @@ class PlanningPage(WorkflowPage):
             if len(missing) > 5:
                 names += f" (+{len(missing) - 5} more)"
             self._finish_ui()
-            self._show_error("Segmentation finished but some T1-L5 masks are missing: " + names)
+            self._show_error("Segmentation finished but some vertebra masks are missing: " + names)
             return
 
         if self.controller.current_volume is not volume:
@@ -299,13 +328,14 @@ class PlanningPage(WorkflowPage):
             else "Loading completed segmentation masks..."
         )
         self.left_sidebar.set_status(loading_text, "waiting")
-        self.status_changed.emit("Loading T1-L5 segmentation masks")
+        self.status_changed.emit("Loading vertebra segmentation masks")
 
         worker = SegmentationLoadWorker(
             self.segmentation_service,
             output_dir,
             volume,
             parent=self,
+            rois=self.segmentation_rois,
         )
         self._load_workers.add(worker)
         worker.progress_changed.connect(
@@ -332,6 +362,8 @@ class PlanningPage(WorkflowPage):
     ) -> None:
         if worker not in self._load_workers or self.controller.current_volume is not worker.volume:
             return
+        if worker.rois != self.segmentation_rois:
+            return
         self.left_sidebar.set_loading_progress(10 + round(value * 0.8), text)
         self.left_sidebar.set_status(text, "waiting")
 
@@ -344,14 +376,20 @@ class PlanningPage(WorkflowPage):
     ) -> None:
         if worker not in self._load_workers or self.controller.current_volume is not volume:
             return
+        if worker.rois != self.segmentation_rois:
+            return
 
         self.left_sidebar.set_loading_progress(95, "Preparing MPR and 3D views")
         self.left_sidebar.loading_progress.repaint()
         self.current_segmentation = segmentation
         stored_plans, stored_accepted = self.planning_service.load_plans(volume)
+        allowed = set(segmentation.labels.values())
+        if self.levels_of_interest:
+            allowed.intersection_update(self.levels_of_interest)
+        stored_plans = {key: plan for key, plan in stored_plans.items() if key[0] in allowed}
         if stored_plans:
             self.plans = stored_plans
-            self.accepted = stored_accepted
+            self.accepted = stored_accepted.intersection(stored_plans)
             self._auto_dimensions = {
                 key: (plan.diameter_mm, plan.length_mm)
                 for key, plan in stored_plans.items()
@@ -713,6 +751,8 @@ class PlanningPage(WorkflowPage):
         volume: MedicalVolume,
     ) -> None:
         if worker not in self._load_workers or self.controller.current_volume is not volume:
+            return
+        if worker.rois != self.segmentation_rois:
             return
         self.left_sidebar.set_loading(False)
         self._finish_ui()

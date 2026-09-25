@@ -74,3 +74,25 @@ def test_oblique_section_and_patient_transform():
     transformed, _ = screw_slice_intersection(moved, transform.GetMatrix())
     assert area(transformed) == pytest.approx(area(section), rel=0.002)
     assert np.max(np.abs(vtk_to_numpy(transformed.GetPoints().GetData())[:, 2])) < 1e-5
+
+
+def test_alignment_guide_projects_direction_and_tracks_angle_changes():
+    from bart_spine_ui.planning.slice_intersection import screw_alignment_guide
+
+    for endpoint in ((30, 40, 20), (-40, 30, -10)):
+        screw = plan((0, 0, 0), endpoint)
+        for matrix in (axes(30), axes(-20)):
+            guide = screw_alignment_guide(screw, matrix)
+            points = vtk_to_numpy(guide.GetPoints().GetData())
+            # Each dash lies on the projected axis, regardless of the slice offset.
+            assert np.max(np.abs(points[:, 0] * endpoint[1] - points[:, 1] * endpoint[0])) < 0.01
+            assert np.all(points[:, 2] == 0)
+            assert np.linalg.norm(points[-1] - points[0]) > 1000
+            assert guide.GetNumberOfLines() > 100
+
+
+def test_perpendicular_screw_has_no_alignment_guide():
+    from bart_spine_ui.planning.slice_intersection import screw_alignment_guide
+
+    guide = screw_alignment_guide(plan((0, 0, -20), (0, 0, 20)), axes())
+    assert guide.GetNumberOfCells() == 0

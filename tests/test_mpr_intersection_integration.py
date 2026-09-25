@@ -7,13 +7,16 @@ import vtk
 import pytest
 
 from bart_spine_ui.ui import MainWindow  # noqa: F401
+from bart_spine_ui.core import SliceOrientation
 from bart_spine_ui.planning.models import ScrewPlan
 from bart_spine_ui.planning.workspace import PlanningWorkspace
 
 
-def test_view_refresh_uses_slice_section_and_removes_old_actors():
+@pytest.mark.parametrize("orientation", list(SliceOrientation))
+def test_view_refresh_uses_slice_section_and_removes_old_actors(orientation):
     class Panel:
         def __init__(self):
+            self.orientation = orientation
             self.renderer = vtk.vtkRenderer()
             self.reslice = vtk.vtkImageReslice()
 
@@ -32,7 +35,12 @@ def test_view_refresh_uses_slice_section_and_removes_old_actors():
     )
     PlanningWorkspace._refresh_mpr_overlay(workspace, panel)
     actors = workspace._mpr_overlay_actors[panel]
-    assert len(actors) == 2
+    guides = int(orientation in (SliceOrientation.AXIAL, SliceOrientation.SAGITTAL))
+    assert len(actors) == 2 + guides
+    if guides:
+        assert actors[-1].GetProperty().GetColor() == (1.0, 0.12, 0.12)
+        assert not actors[-1].GetUseBounds()
+        assert actors[-1].GetMapper().GetInput().GetNumberOfLines() > 100
     assert actors[0].GetMapper().GetInput().GetBounds() == pytest.approx(
         (-3, 3, -20, 20, 0, 0),
         abs=0.005,
@@ -40,7 +48,7 @@ def test_view_refresh_uses_slice_section_and_removes_old_actors():
     for offset in (4, 0, 4, 0):
         axes.SetElement(2, 3, offset)
         PlanningWorkspace._refresh_mpr_overlay(workspace, panel)
-        expected = 0 if offset == 4 else 2
+        expected = (0 if offset == 4 else 2) + guides
         assert len(workspace._mpr_overlay_actors[panel]) == expected
         assert panel.renderer.GetViewProps().GetNumberOfItems() == expected
     workspace._active_plan = None
