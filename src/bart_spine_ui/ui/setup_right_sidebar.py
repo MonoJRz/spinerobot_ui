@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..planning.service import parse_levels_of_interest
+from .spine_level_selector import SpineLevelSelector
 from .status_indicator import StatusIndicator, StatusState
 
 
@@ -146,9 +148,24 @@ class SetupRightSidebar(QFrame):
             form.addRow(name, field)
             fields[name] = field
         layout.addLayout(form)
+        fields["Region"].hide()
+        form.labelForField(fields["Region"]).hide()
+        selector = SpineLevelSelector(parse_levels_of_interest(fields["Region"].text()))
+        layout.addWidget(selector)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(bool(selector.selected_levels()))
+        selector.selection_changed.connect(
+            lambda: buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(
+                bool(selector.selected_levels()) and bool(fields["Case ID"].text().strip())
+            )
+        )
+        fields["Case ID"].textChanged.connect(
+            lambda: buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(
+                bool(selector.selected_levels()) and bool(fields["Case ID"].text().strip())
+            )
         )
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -157,6 +174,7 @@ class SetupRightSidebar(QFrame):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
+        fields["Region"].setText(", ".join(selector.selected_levels()))
         values = tuple(fields[name].text().strip() for name in fields)
         if not values[0]:
             fields["Case ID"].setFocus()

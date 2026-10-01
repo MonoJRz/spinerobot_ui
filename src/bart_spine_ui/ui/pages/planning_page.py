@@ -416,7 +416,7 @@ class PlanningPage(WorkflowPage):
         available = self.planning_service.available_levels(segmentation)
         requested = parse_levels_of_interest(self.case_region)
         levels = [level for level in requested if level in available]
-        if not levels:
+        if not levels and not requested:
             # Keep the workflow usable if the case region has not been populated yet.
             levels = available
             if self.case_region:

@@ -201,3 +201,17 @@ def test_lumbar_run_and_loading_do_not_require_thoracic_masks(tmp_path, monkeypa
     result = service.load_result(run, reference)
     assert result.labels == {13 + index: f"L{index + 1}" for index in range(5)}
     assert set(np.unique(sitk.GetArrayFromImage(result.sitk_image))) == {0, 13, 14, 15, 16, 17}
+
+
+def test_cervical_and_s1_masks_keep_existing_label_ids(tmp_path):
+    reference = _reference_volume(tmp_path)
+    rois = ('vertebrae_C1', 'vertebrae_S1')
+    for index, roi in enumerate(rois):
+        array = np.zeros((3, 4, 4), dtype=np.uint8)
+        array[1, 1, index+1] = 1
+        mask = sitk.GetImageFromArray(array)
+        mask.CopyInformation(reference.sitk_image)
+        sitk.WriteImage(mask, str(tmp_path / f'{roi}.nii.gz'))
+    result = TotalSegmentatorService().load_from_directory(tmp_path, reference, rois=rois)
+    assert result.labels == {18: 'C1', 25: 'S1'}
+    assert set(np.unique(sitk.GetArrayFromImage(result.sitk_image))) == {0, 18, 25}

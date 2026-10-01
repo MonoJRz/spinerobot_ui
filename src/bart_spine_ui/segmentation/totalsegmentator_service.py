@@ -13,12 +13,17 @@ from .models import SegmentationVolume
 THORACIC_LUMBAR_ROIS = tuple(
     [f"vertebrae_T{i}" for i in range(1, 13)] + [f"vertebrae_L{i}" for i in range(1, 6)]
 )
-
+# Append new IDs to preserve saved T1-L5 labels and colors.
+FULL_SPINE_ROIS = THORACIC_LUMBAR_ROIS + tuple(
+    [f"vertebrae_C{i}" for i in range(1, 8)] + ["vertebrae_S1"]
+)
 LUMBAR_ROIS = tuple(f"vertebrae_L{i}" for i in range(1, 6))
 
 
 def rois_for_case(anatomy: str | None, levels: list[str]) -> tuple[str, ...]:
     """Use L1-L5 for lumbar-only cases; mixed thoracic cases retain T1-L5."""
+    if any(level.startswith(("C", "S")) for level in levels):
+        return tuple(f"vertebrae_{level}" for level in levels)
     anatomy = (anatomy or "").lower()
     if any(level.startswith("T") for level in levels) or "thorac" in anatomy:
         return THORACIC_LUMBAR_ROIS
@@ -58,7 +63,7 @@ class TotalSegmentatorService:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Avoid stale masks being mistaken for a successful new inference.
-        for roi in THORACIC_LUMBAR_ROIS:
+        for roi in FULL_SPINE_ROIS:
             (output_dir / f"{roi}.nii.gz").unlink(missing_ok=True)
 
         # TotalSegmentator accepts NIfTI. Export the canonical in-memory CT so
@@ -125,7 +130,7 @@ class TotalSegmentatorService:
 
         for index, roi in enumerate(rois):
             # Keep the same label IDs/colors when loading only a subset.
-            label_value = THORACIC_LUMBAR_ROIS.index(roi) + 1
+            label_value = FULL_SPINE_ROIS.index(roi) + 1
             if progress_callback is not None:
                 progress_callback(
                     round(index / len(rois) * 85),
@@ -161,9 +166,9 @@ class TotalSegmentatorService:
 
     @staticmethod
     def _validate_rois(rois: tuple[str, ...]) -> tuple[str, ...]:
-        if not rois or any(roi not in THORACIC_LUMBAR_ROIS for roi in rois):
+        if not rois or any(roi not in FULL_SPINE_ROIS for roi in rois):
             raise ValueError("Select at least one supported vertebra.")
-        return tuple(roi for roi in THORACIC_LUMBAR_ROIS if roi in rois)
+        return tuple(roi for roi in FULL_SPINE_ROIS if roi in rois)
 
     @staticmethod
     def output_directory(source_path: Path) -> Path:

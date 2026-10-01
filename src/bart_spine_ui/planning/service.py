@@ -12,7 +12,10 @@ from ..imaging.models import MedicalVolume
 from ..segmentation import SegmentationVolume
 from .models import PedicleFrame, ScrewPlan, Side
 
-LEVEL_ORDER = tuple([f"T{i}" for i in range(1, 13)] + [f"L{i}" for i in range(1, 6)])
+LEVEL_ORDER = tuple(
+    [f"C{i}" for i in range(1, 8)] + [f"T{i}" for i in range(1, 13)]
+    + [f"L{i}" for i in range(1, 6)] + ["S1"]
+)
 STANDARD_DIAMETERS_MM = tuple(np.arange(3.0, 8.5, 0.5).tolist())
 STANDARD_LENGTHS_MM = tuple(range(25, 81, 5))
 MIN_SAFE_CORRIDOR_LENGTH_MM = 25.0
@@ -23,7 +26,7 @@ def parse_levels_of_interest(region: str | None) -> list[str]:
 
     if not region:
         return []
-    tokens = [token.upper() for token in re.findall(r"\b[TL]\s*\d{1,2}\b", region.upper())]
+    tokens = [token.upper() for token in re.findall(r"\b[CTLS]\s*\d{1,2}\b", region.upper())]
     tokens = [token.replace(" ", "") for token in tokens if token.replace(" ", "") in LEVEL_ORDER]
     if not tokens:
         return []

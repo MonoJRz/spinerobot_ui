@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 
 import numpy as np
 import vtk
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -13,11 +16,13 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QScroller,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
+from ...planning.assessment import DEFAULT_ENTRY_EXCLUSION_MM
 from ...planning.collision import ScrewCollision, collisions_for_key, find_screw_collisions
 from ...planning.models import Side
 from ...planning.rod import (
@@ -27,6 +32,7 @@ from ...planning.rod import (
     build_rod_plan,
 )
 from ...planning.service import LEVEL_ORDER
+from ..screw_assessment_panel import GRADE_COLORS, AssessmentWorker, ScrewAssessmentPanel
 from .planning_page import PlanningPage as BasePlanningPage
 
 
@@ -35,6 +41,8 @@ class ConstructReviewWidget(QFrame):
 
     back_requested = Signal()
     confirm_requested = Signal()
+    rods_toggled = Signal(bool)
+    overview_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -53,7 +61,7 @@ class ConstructReviewWidget(QFrame):
         title_box.setSpacing(2)
         title = QLabel("CONSTRUCT REVIEW")
         title.setObjectName("ConstructTitle")
-        subtitle = QLabel("Review bilateral screw-head alignment and planned rod contour before confirmation")
+        subtitle = QLabel("Screws · bone density · rod fit")
         subtitle.setObjectName("ConstructSubtitle")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
@@ -94,7 +102,15 @@ class ConstructReviewWidget(QFrame):
         note = QLabel("● accepted screw\n○ not accepted")
         note.setObjectName("ConstructHint")
         level_layout.addWidget(note)
-        body.addWidget(self.level_card)
+        level_scroll = QScrollArea()
+        level_scroll.setObjectName("ConstructLevelScroll")
+        level_scroll.setWidgetResizable(True)
+        QScroller.grabGesture(level_scroll.viewport(), QScroller.ScrollerGestureType.TouchGesture)
+        level_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        level_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        level_scroll.setFixedWidth(235)
+        level_scroll.setWidget(self.level_card)
+        body.addWidget(level_scroll)
 
         self.three_d_card = QFrame()
         self.three_d_card.setObjectName("Construct3DCard")
@@ -107,10 +123,23 @@ class ConstructReviewWidget(QFrame):
         view_label.setObjectName("ConstructSectionTitle")
         view_header.addWidget(view_label)
         view_header.addStretch(1)
+        self.rods_visible = QCheckBox("Insert rods")
+        self.rods_visible.setChecked(True)
+        self.rods_visible.toggled.connect(self.rods_toggled.emit)
+        view_header.addWidget(self.rods_visible)
         legend = QLabel("SCREWS  •  LEFT ROD  •  RIGHT ROD")
         legend.setObjectName("ConstructLegend")
         view_header.addWidget(legend)
         center_layout.addLayout(view_header)
+        # Keep the optional legend available to render and breach-location updates.
+        self.breach_legend = QLabel(self.three_d_card)
+        self.breach_legend.hide()
+        self.overview_button = QPushButton("Full construct")
+        self.overview_button.setMinimumHeight(48)
+        self.overview_button.setStyleSheet("color:#e2f2fc; background:#204c65; font-size:14px;")
+        self.overview_button.clicked.connect(self.overview_requested)
+        self.overview_button.hide()
+        center_layout.addWidget(self.overview_button)
         self.three_d_host = QVBoxLayout()
         self.three_d_host.setContentsMargins(0, 0, 0, 0)
         self.three_d_host.setSpacing(0)
@@ -120,6 +149,7 @@ class ConstructReviewWidget(QFrame):
         rod_scroll = QScrollArea()
         rod_scroll.setObjectName("RodReviewScroll")
         rod_scroll.setWidgetResizable(True)
+        QScroller.grabGesture(rod_scroll.viewport(), QScroller.ScrollerGestureType.TouchGesture)
         rod_scroll.setFrameShape(QFrame.Shape.NoFrame)
         rod_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         rod_scroll.setFixedWidth(330)
@@ -130,6 +160,8 @@ class ConstructReviewWidget(QFrame):
         rod_layout.setSpacing(10)
         self.left_rod = _RodCard("LEFT ROD")
         self.right_rod = _RodCard("RIGHT ROD")
+        self.assessment_panel = ScrewAssessmentPanel()
+        rod_layout.addWidget(self.assessment_panel)
         rod_layout.addWidget(self.left_rod)
         rod_layout.addWidget(self.right_rod)
         rod_layout.addStretch(1)
@@ -328,12 +360,24 @@ class PlanningPage(BasePlanningPage):
         self.construct_review.back_requested.connect(self._back_to_screws)
         self.construct_review.confirm_requested.connect(self._confirm_construct)
         self._rod_plans: dict[Side, RodPlan | None] = {"left": None, "right": None}
+        self._assessment_workers = []
+        self._assessment_generation = 0
+        self._assessments = {}
+        self.construct_review.rods_toggled.connect(lambda _: self._render_construct())
+        self.construct_review.assessment_panel.locate_breach_requested.connect(self._locate_breach)
+        self.construct_review.overview_requested.connect(self._render_construct)
 
     def _reset_volume_state(self) -> None:
         super()._reset_volume_state()
         # The base constructor can receive a volume before the review widget exists.
         if not hasattr(self, "construct_review"):
             return
+        self._assessment_generation = getattr(self, "_assessment_generation", 0) + 1
+        self._assessments = {}
+        for worker in getattr(self, "_assessment_workers", []):
+            worker.requestInterruption()
+        self.construct_review.assessment_panel.clear("No measurements")
+        self.construct_review.assessment_panel.hu_confirmed.setChecked(False)
         self._rod_plans = {"left": None, "right": None}
         self.construct_review.set_construct([], set(), self._rod_plans)
         self.construct_review.hide()
@@ -486,10 +530,60 @@ class PlanningPage(BasePlanningPage):
             self._rod_plans,
             collisions,
         )
+        self._start_assessments()
         self.construct_review.show()
         self._restore_review_segmentation()
         self._render_construct()
         self.status_changed.emit("Construct review — inspect bilateral rod fit and screw-head alignment")
+
+    def stop_assessments(self) -> None:
+        self._assessment_generation += 1
+        for worker in self._assessment_workers:
+            worker.requestInterruption()
+        for worker in self._assessment_workers:
+            worker.wait()
+
+    def _start_assessments(self) -> None:
+        self._assessment_generation += 1
+        generation = self._assessment_generation
+        self._assessments = {}
+        panel = self.construct_review.assessment_panel
+        panel.clear()
+        volume = self.controller.current_volume
+        if self.current_segmentation is None or volume is None or volume.is_demo:
+            panel.clear("Clinical CT + segmentation required")
+            return
+        for old in self._assessment_workers:
+            old.requestInterruption()
+        ordered = dict(sorted(self.plans.items(), key=lambda item: (
+            LEVEL_ORDER.index(item[0][0]), item[0][1])))
+        worker = AssessmentWorker(
+            self.current_segmentation, volume, deepcopy(ordered), self,
+            entry_exclusion_mm=DEFAULT_ENTRY_EXCLUSION_MM,
+        )
+        self._assessment_workers.append(worker)
+
+        def completed(results):
+            if generation != self._assessment_generation:
+                return
+            self._assessments = results
+            panel.set_results(results)
+            if self.construct_review.isVisible():
+                self._render_construct()
+
+        def failed(message):
+            if generation == self._assessment_generation:
+                panel.clear("Assessment unavailable")
+                panel.status.setToolTip(message)
+
+        def finished():
+            self._assessment_workers.remove(worker)
+            worker.deleteLater()
+
+        worker.completed.connect(completed)
+        worker.failed.connect(failed)
+        worker.finished.connect(finished)
+        worker.start()
 
     def _back_to_screws(self) -> None:
         self.construct_review.hide()
@@ -569,10 +663,106 @@ class PlanningPage(BasePlanningPage):
         panel.segmentation_actor.SetVisibility(True)
         panel.volume_actor.SetVisibility(False)
 
+    @staticmethod
+    def _breach_actors(result) -> list[vtk.vtkProp]:
+        """True-scale segment from nearest bone surface to maximum outside mesh point."""
+        if (result is None or result.breach_mm is None or result.breach_mm <= 0
+                or result.bone_point_lps is None or result.breach_point_lps is None):
+            return []
+        a = np.asarray(result.bone_point_lps)
+        b = np.asarray(result.breach_point_lps)
+        points = vtk.vtkPoints()
+        points.SetDataTypeToDouble()
+        points.InsertNextPoint(*a)
+        points.InsertNextPoint(*b)
+        lines = vtk.vtkCellArray()
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(0)
+        lines.InsertCellPoint(1)
+        data = vtk.vtkPolyData()
+        data.SetPoints(points)
+        data.SetLines(lines)
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(data)
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(1.0, 0.15, 0.20)
+        actor.GetProperty().SetLineWidth(4)
+        actor.GetProperty().SetRenderLinesAsTubes(True)
+        actor.GetProperty().LightingOff()
+        actor.PickableOff()
+        label = vtk.vtkBillboardTextActor3D()
+        label.SetInput(result.breach_text)
+        label.SetPosition(*b)
+        label.GetTextProperty().SetColor(1.0, 0.25, 0.30)
+        label.GetTextProperty().SetFontSize(15)
+        label.GetTextProperty().BoldOn()
+        label.PickableOff()
+        return [actor, label]
+
+    def _locate_breach(self, key) -> None:
+        result = self._assessments.get(key)
+        plan = self.plans.get(key)
+        if result is None or plan is None or result.breach_point_lps is None:
+            return
+        self.workspace._clear_three_d_overlays()
+        panel = self.workspace.three_d
+        renderer = panel.renderer
+        panel.segmentation_actor.SetVisibility(False)
+        # Inspect the actual measurement geometry, not the smoothed display mesh.
+        actors = self._breach_actors(result)
+        if result.boundary_mesh is not None:
+            mapper = vtk.vtkPolyDataMapper()
+            mapper.SetInputData(result.boundary_mesh)
+            bone = vtk.vtkActor()
+            bone.SetMapper(mapper)
+            bone.GetProperty().SetColor(.65, .80, .87)
+            bone.GetProperty().SetOpacity(.30)
+            bone.PickableOff()
+            actors.append(bone)
+        axis = np.asarray(plan.direction, dtype=float)
+        axis /= np.linalg.norm(axis)
+        if result.screw_mesh is not None:
+            mapper = vtk.vtkPolyDataMapper()
+            mapper.SetInputData(result.screw_mesh)
+            mapper.ScalarVisibilityOff()
+            screw = vtk.vtkActor()
+            screw.SetMapper(mapper)
+            screw.GetProperty().SetColor(.95, .75, .32)
+            screw.GetProperty().SetOpacity(.35)
+            screw.PickableOff()
+            actors.append(screw)
+        for actor in actors:
+            renderer.AddActor(actor)
+        self.workspace._three_d_actors.extend(actors)
+        point = np.asarray(result.breach_point_lps)
+        normal = point-np.asarray(result.bone_point_lps)
+        normal /= np.linalg.norm(normal)
+        # View perpendicular to the red segment so its true length is visible.
+        viewing = np.cross(axis, normal)
+        if np.linalg.norm(viewing) < 1e-6:
+            viewing = np.cross(normal, np.eye(3)[np.argmin(np.abs(normal))])
+        viewing /= np.linalg.norm(viewing)
+        camera = renderer.GetActiveCamera()
+        camera.SetFocalPoint(*point)
+        camera.SetPosition(*(point+viewing*40))
+        camera.SetViewUp(*normal)
+        camera.ParallelProjectionOn()
+        camera.SetParallelScale(max(2., result.breach_mm*3))
+        renderer.ResetCameraClippingRange()
+        self.construct_review.breach_legend.setText(
+            f"{key[0]} {key[1][0].upper()} · {result.breach_text} outside · "
+            f"{result.breach_depth_mm:.1f} mm from entry\nRaw bone · screw mesh")
+        self.construct_review.overview_button.show()
+        panel.vtk_widget.GetRenderWindow().Render()
+
     def _render_construct(self) -> None:
         # PlanningWorkspace normally displays only the active screw. In this mode
         # intentionally use its overlay actor collection to render the full construct.
         self.workspace._clear_three_d_overlays()
+        self._restore_review_segmentation()
+        self.construct_review.overview_button.hide()
+        self.construct_review.breach_legend.setText("━  Max screw breach · first 10 mm excluded")
         renderer = self.workspace.three_d.renderer
 
         screw_actors: list[vtk.vtkProp] = []
@@ -597,9 +787,11 @@ class PlanningPage(BasePlanningPage):
             for level, direction in rod.tulip_slot_directions_lps.items()
         }
         for key, plan in ordered_items:
+            result = self._assessments.get(key)
+            tint = QColor(GRADE_COLORS[result.grade]) if result else QColor("#a3c7db")
             body = self.workspace._screw_actor(
                 plan,
-                color=(0.95, 0.30, 0.34) if key in collision_keys else (0.64, 0.78, 0.86),
+                color=(0.95, 0.30, 0.34) if key in collision_keys else (tint.redF(), tint.greenF(), tint.blueF()),
                 opacity=1.0,
             )
             tulip_actors = self.workspace._tulip_actors(
@@ -612,6 +804,9 @@ class PlanningPage(BasePlanningPage):
             for actor in tulip_actors:
                 renderer.AddActor(actor)
             screw_actors.extend((body, *tulip_actors))
+            for marker in self._breach_actors(result):
+                renderer.AddActor(marker)
+                screw_actors.append(marker)
 
         rod_actors: list[vtk.vtkProp] = []
         rod_colors = {
@@ -619,6 +814,8 @@ class PlanningPage(BasePlanningPage):
             "right": (0.38, 0.86, 0.58),
         }
         for side in ("left", "right"):
+            if not self.construct_review.rods_visible.isChecked():
+                continue
             rod = self._rod_plans.get(side)
             if rod is None:
                 continue
@@ -723,6 +920,9 @@ class PlanningPage(BasePlanningPage):
 
 
 _CONSTRUCT_STYLE = r"""
+QCheckBox { color: #c5d7e2; spacing: 6px; }
+QCheckBox::indicator { width: 15px; height: 15px; }
+
 QFrame#ConstructReview {
     background: #0b1014;
 }
@@ -796,10 +996,22 @@ QLabel#ConstructLegend {
     font-size: 10px;
     font-weight: 700;
 }
-QScrollArea#RodReviewScroll, QWidget#RodReviewContent {
+QScrollArea#ConstructLevelScroll, QScrollArea#RodReviewScroll, QWidget#RodReviewContent {
     background: #0b1014;
     border: none;
 }
+QScrollBar:vertical {
+    background: #101820;
+    width: 18px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #476a80;
+    min-height: 48px;
+    border-radius: 7px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
 QLabel#RodSpec {
     color: #9fd3ea;
     font-size: 12px;

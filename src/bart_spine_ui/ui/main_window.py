@@ -137,6 +137,7 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
+        self.planning_page.stop_assessments()
         self.cad_export_dialog.stop_export()
         if hasattr(self, "robot_client"):
             self.robot_client.shutdown()

@@ -1,6 +1,6 @@
 import vtk
 
-VERTEBRA_LABEL_COUNT = 17
+VERTEBRA_LABEL_COUNT = 25
 MPR_SEGMENTATION_OPACITY = 0.35
 
 # Fixed, muted categorical colors keep adjacent vertebrae distinct without the
@@ -24,6 +24,7 @@ MEDICAL_SEGMENTATION_COLORS = (
     (255, 226, 138),
     (211, 166, 204),
 )
+MEDICAL_SEGMENTATION_COLORS += MEDICAL_SEGMENTATION_COLORS[:8]
 
 
 def create_segmentation_lookup_table(*, opacity: float = 1.0) -> vtk.vtkLookupTable:
