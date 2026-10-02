@@ -166,6 +166,7 @@ def test_screw_plans_round_trip_through_case_json(tmp_path):
         {("L4", "left"): plan},
         case_region="L4",
         accepted={("L4", "left")},
+        skipped={("L4", "right")},
     )
     loaded, accepted = service.load_plans(volume)
 
@@ -176,6 +177,9 @@ def test_screw_plans_round_trip_through_case_json(tmp_path):
     assert loaded[("L4", "left")].screw_tip_point == (8.0, -12.0, 30.0)
     assert loaded[("L4", "left")].trajectory_method == "STP"
     assert accepted == {("L4", "left")}
+    assert service.load_skipped(volume) == {("L4", "right")}
+    service.save_plans(volume, loaded, accepted=accepted)
+    assert service.load_skipped(volume) == set()
 
 
 def test_endplate_normal_follows_fitted_superior_surface_slope():

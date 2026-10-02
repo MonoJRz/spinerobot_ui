@@ -12,7 +12,7 @@ class SpineLevelSelector(QFrame):
         super().__init__(parent)
         self.buttons = {}
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Screw levels · tap to select"))
+        layout.addWidget(QLabel("Screw levels"))
         regions = QHBoxLayout()
         for prefix, name in (("C", "Cervical"), ("T", "Thoracic"),
                              ("L", "Lumbar"), ("S", "Sacral")):

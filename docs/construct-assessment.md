@@ -9,14 +9,36 @@ After screw acceptance, Construct shows rods, per-screw breach distances, and
 estimated Gertzbein–Robbins categories. “Insert rods” shows/hides planned rods.
 Screw colors match their grade. Collision highlighting takes precedence.
 
-Tap “Show CT values · HU” to display entry-to-tip density strips for calibrated
-CT data. A matching gradient legend labels 0, 250, 500, 750, and 1000 HU; gray
-has a separate “No sample” key. Tap or drag a strip for a persistent depth, mean
-HU, and bone sampling coverage readout. Arrow keys, Home, and End also select
-samples. The fixed
-0–1000 HU display scale clips colors only; numerical values are not clipped.
-Gray means no valid bone samples. Sampling does not infer osteoporosis or
-convert HU into calibrated bone mineral density.
+Tap “Open HU analysis” for a LEFT / VERTEBRA / RIGHT overview. Each large card
+shows mean HU, **Coverage**, and a CT depth sparkline. Three levels appear per
+page, with large Previous / Next buttons rather than scrolling. Profiles share a
+single HU range across all planned screws, including negative and >1000 HU values.
+Missing samples appear as pink crosses and gaps. Skipped sides display “SKIPPED”.
+Tap a card for its full profile, histogram, numeric summaries, and review reasons.
+
+Mean HU still averages valid depth samples from segmented bone in a 1 mm shell
+outside the screw. No intensity threshold or age adjustment is applied. The former
+“bone coverage” percentage is now labeled **CT sample support** in the detailed
+sample readout: the fraction of shell samples that both belong to the selected
+vertebra and contain finite CT values. It is not screw containment.
+
+**Coverage** estimates the fraction of the actual screw surface inside the raw
+vertebra mesh, after the same fixed entry exclusion as G–R grading. Each triangle
+contributes its physical area, sampled at four equal-area subtriangle centroids;
+this avoids weighting dense mesh regions more heavily simply because they have
+more vertices. Closed-surface membership uses
+[VTK vtkSelectEnclosedPoints](https://vtk.org/doc/nightly/html/classvtkSelectEnclosedPoints.html).
+Open, nonmanifold, missing, or cropped bone geometry yields an unavailable metric,
+not an assumed 0% or 100%. Values are not rescaled to a presumed elderly cohort.
+This is a sampled surface-area estimate, not screw volume, bone density, fixation
+strength, or clinical clearance. It still depends on segmentation accuracy and
+mesh resolution; no patient-dataset validation has been performed for this change.
+
+“REVIEW” flags a non-A/unavailable G–R result, any measured surface outside the
+mesh, missing CT samples, unavailable coverage, or an assessment reason. No new HU
+or coverage percentage cutoff is used. “✓ G–R A” means grade A, full sampled
+containment, and a complete CT profile; it does not certify safe fixation. These
+rules are available through the large Metrics button and in per-screw details.
 
 ## Geometry and limits
 
@@ -37,11 +59,8 @@ selection persistence, HU visibility, rod toggling, and scan reset behavior.
 
 ## Touchscreen interaction
 
-The density toggle uses a full-width, 56 logical pixel touch area. Color is supplemented by explicit values and state
-labels. HU values are available on tap, without relying on hover tooltips.
-The Qt display scaling and physical touchscreen should still be checked on the
-intended hardware.
-
-Design references: [Google touch-target guidance](https://support.google.com/accessibility/android/answer/7101858?hl=en-GB)
-(48 dp minimum and spacing) and [NN/g touchscreen targets](https://www.nngroup.com/articles/touch-target-size/)
-(physical size, separation, and visible affordances).
+The overview uses large cards, 48–52 logical pixel buttons, and numeric values
+alongside color and sparklines. Detail plots support tapping and arrow keys,
+Home, and End. Changing the scan or closing the overview closes its detail window.
+Layout tests cover a 1024×700 overview; physical touchscreen sizing still depends
+on Qt display scaling and the intended hardware.

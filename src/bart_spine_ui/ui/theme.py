@@ -523,6 +523,21 @@ QPushButton#RejectPlanningButton:hover {
     background: #672d35;
 }
 
+QPushButton#SkipPlanningButton {
+    background: #f2c94c;
+    color: #201b0a;
+    border: 1px solid #ffdf78;
+    border-radius: 7px;
+    font-weight: 800;
+}
+QPushButton#SkipPlanningButton:hover { background: #ffdc73; }
+QPushButton#SkipPlanningButton:pressed { background: #d8ad30; }
+QPushButton#SkipPlanningButton:disabled {
+    background: #4c4329;
+    color: #aaa080;
+    border-color: #655a37;
+}
+
 QMenu#SettingsMenu {
     background: #141b20;
     color: #dce4e9;

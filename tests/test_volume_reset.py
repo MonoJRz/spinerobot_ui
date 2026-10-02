@@ -13,7 +13,7 @@ def make_page(volume):
         controller=SimpleNamespace(current_volume=volume),
         current_run=None, _run_volume=None, _running=False,
         current_segmentation=object(), plans={("L4", "left"): object()},
-        accepted={("L4", "left")}, _auto_dimensions={("L4", "left"): (6, 40)},
+        accepted={("L4", "left")}, skipped={("L4", "right")}, _auto_dimensions={("L4", "left"): (6, 40)},
         _queue=[("L4", "left")], _target_index=2,
         workspace=MagicMock(), left_sidebar=MagicMock(), screw_table=MagicMock(),
         segmentation_service=MagicMock(), process=MagicMock(),
@@ -28,6 +28,7 @@ def test_volume_change_resets_inactive_planning_and_same_volume_preserves_it():
     page = make_page(volume)
     PlanningPage._on_volume_loaded(page, volume)
     assert page.current_segmentation is None
+    assert not page.skipped
     assert not page.plans and not page.accepted and not page._auto_dimensions
     assert not page._queue and page._target_index == 0
     page.workspace.clear_segmentation.assert_called_once()
@@ -61,6 +62,7 @@ def test_volume_change_stops_old_process_and_ignores_late_worker_events():
     PlanningPage._on_process_finished(page, 1, None)
     assert not page.left_sidebar.mock_calls
     assert page.current_segmentation is None
+    assert not page.skipped
 
 
 def test_construct_review_is_cleared_on_volume_change(monkeypatch):
@@ -124,6 +126,7 @@ def test_case_change_resets_old_subset_and_ignores_its_worker():
     assert page.segmentation_rois == LUMBAR_ROIS
     assert page.levels_of_interest == ["L3", "L4", "L5"]
     assert page.current_segmentation is None
+    assert not page.skipped
     assert not page.plans
     worker = SimpleNamespace(volume=volume, rois=THORACIC_LUMBAR_ROIS)
     page._load_workers = [worker]

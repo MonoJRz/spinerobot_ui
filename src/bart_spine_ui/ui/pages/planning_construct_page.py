@@ -15,8 +15,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
-    QScroller,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -64,7 +62,7 @@ class ConstructReviewWidget(QFrame):
         subtitle = QLabel("Screws · bone density · rod fit")
         subtitle.setObjectName("ConstructSubtitle")
         title_box.addWidget(title)
-        title_box.addWidget(subtitle)
+        subtitle.hide()
         header_layout.addLayout(title_box)
         header_layout.addStretch(1)
         self.mode_badge = QLabel("RESEARCH PLANNING")
@@ -82,35 +80,9 @@ class ConstructReviewWidget(QFrame):
         body = QHBoxLayout()
         body.setSpacing(10)
 
-        self.level_card = QFrame()
-        self.level_card.setObjectName("ConstructCard")
-        self.level_card.setFixedWidth(215)
-        level_layout = QVBoxLayout(self.level_card)
-        level_layout.setContentsMargins(14, 14, 14, 14)
-        level_layout.setSpacing(10)
-        level_title = QLabel("LEVELS")
-        level_title.setObjectName("ConstructSectionTitle")
-        level_layout.addWidget(level_title)
-        level_rule = QFrame()
-        level_rule.setObjectName("ConstructRule")
-        level_layout.addWidget(level_rule)
-        self.level_grid = QGridLayout()
-        self.level_grid.setHorizontalSpacing(12)
-        self.level_grid.setVerticalSpacing(10)
-        level_layout.addLayout(self.level_grid)
-        level_layout.addStretch(1)
-        note = QLabel("● accepted screw\n○ not accepted")
-        note.setObjectName("ConstructHint")
-        level_layout.addWidget(note)
-        level_scroll = QScrollArea()
-        level_scroll.setObjectName("ConstructLevelScroll")
-        level_scroll.setWidgetResizable(True)
-        QScroller.grabGesture(level_scroll.viewport(), QScroller.ScrollerGestureType.TouchGesture)
-        level_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        level_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        level_scroll.setFixedWidth(235)
-        level_scroll.setWidget(self.level_card)
-        body.addWidget(level_scroll)
+        scene_column = QVBoxLayout()
+        scene_column.setSpacing(10)
+        body.addLayout(scene_column, 3)
 
         self.three_d_card = QFrame()
         self.three_d_card.setObjectName("Construct3DCard")
@@ -129,7 +101,7 @@ class ConstructReviewWidget(QFrame):
         view_header.addWidget(self.rods_visible)
         legend = QLabel("SCREWS  •  LEFT ROD  •  RIGHT ROD")
         legend.setObjectName("ConstructLegend")
-        view_header.addWidget(legend)
+        legend.hide()
         center_layout.addLayout(view_header)
         # Keep the optional legend available to render and breach-location updates.
         self.breach_legend = QLabel(self.three_d_card)
@@ -144,29 +116,21 @@ class ConstructReviewWidget(QFrame):
         self.three_d_host.setContentsMargins(0, 0, 0, 0)
         self.three_d_host.setSpacing(0)
         center_layout.addLayout(self.three_d_host, 1)
-        body.addWidget(self.three_d_card, 1)
+        scene_column.addWidget(self.three_d_card, 1)
 
-        rod_scroll = QScrollArea()
-        rod_scroll.setObjectName("RodReviewScroll")
-        rod_scroll.setWidgetResizable(True)
-        QScroller.grabGesture(rod_scroll.viewport(), QScroller.ScrollerGestureType.TouchGesture)
-        rod_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        rod_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        rod_scroll.setFixedWidth(330)
-        rod_content = QWidget()
-        rod_content.setObjectName("RodReviewContent")
-        rod_layout = QVBoxLayout(rod_content)
+        self.rod_info = QWidget()
+        self.rod_info.setFixedHeight(190)
+        rod_layout = QHBoxLayout(self.rod_info)
         rod_layout.setContentsMargins(0, 0, 0, 0)
         rod_layout.setSpacing(10)
         self.left_rod = _RodCard("LEFT ROD")
         self.right_rod = _RodCard("RIGHT ROD")
+        rod_layout.addWidget(self.left_rod, 1)
+        rod_layout.addWidget(self.right_rod, 1)
+        scene_column.addWidget(self.rod_info)
         self.assessment_panel = ScrewAssessmentPanel()
-        rod_layout.addWidget(self.assessment_panel)
-        rod_layout.addWidget(self.left_rod)
-        rod_layout.addWidget(self.right_rod)
-        rod_layout.addStretch(1)
-        rod_scroll.setWidget(rod_content)
-        body.addWidget(rod_scroll)
+        self.assessment_panel.setMinimumWidth(380)
+        body.addWidget(self.assessment_panel, 2)
         root.addLayout(body, 1)
 
         footer = QFrame()
@@ -188,7 +152,7 @@ class ConstructReviewWidget(QFrame):
 
     def attach_three_d(self, view: QWidget) -> None:
         self._three_d_view = view
-        view.setMinimumHeight(430)
+        view.setMinimumHeight(240)
         view.setMaximumHeight(16777215)
         self.three_d_host.addWidget(view, 1)
         view.show()
@@ -199,8 +163,9 @@ class ConstructReviewWidget(QFrame):
         accepted: set[tuple[str, Side]],
         rods: Mapping[Side, RodPlan | None],
         collisions: list[ScrewCollision] | None = None,
+        skipped: set[tuple[str, Side]] | None = None,
     ) -> None:
-        self._populate_levels(levels, accepted)
+        self.assessment_panel.set_targets(levels, accepted, skipped or set())
         self.left_rod.set_plan(rods.get("left"))
         self.right_rod.set_plan(rods.get("right"))
         self.set_confirmed(False)
@@ -234,32 +199,6 @@ class ConstructReviewWidget(QFrame):
             self.confirm_button.setText("CONFIRM CONSTRUCT  →")
             self.confirm_button.setEnabled(not self.collision_banner.isVisible())
 
-    def _populate_levels(
-        self,
-        levels: list[str],
-        accepted: set[tuple[str, Side]],
-    ) -> None:
-        while self.level_grid.count():
-            item = self.level_grid.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-
-        for column, text in ((1, "L"), (2, "R")):
-            label = QLabel(text)
-            label.setObjectName("ConstructColumnHeader")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.level_grid.addWidget(label, 0, column)
-
-        for row, level in enumerate(levels, start=1):
-            label = QLabel(level)
-            label.setObjectName("ConstructLevel")
-            self.level_grid.addWidget(label, row, 0)
-            for column, side in ((1, "left"), (2, "right")):
-                dot = QLabel("●" if (level, side) in accepted else "○")
-                dot.setObjectName("ConstructAccepted" if (level, side) in accepted else "ConstructPending")
-                dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.level_grid.addWidget(dot, row, column)
 
 
 class _RodCard(QFrame):
@@ -267,8 +206,8 @@ class _RodCard(QFrame):
         super().__init__(parent)
         self.setObjectName("RodCard")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 13, 14, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setSpacing(4)
 
         title_label = QLabel(title)
         title_label.setObjectName("RodTitle")
@@ -276,6 +215,7 @@ class _RodCard(QFrame):
 
         self.spec = QLabel("—")
         self.spec.setObjectName("RodSpec")
+        self.spec.setWordWrap(True)
         layout.addWidget(self.spec)
 
         rule = QFrame()
@@ -343,9 +283,10 @@ class _RodCard(QFrame):
             self.status.setStyleSheet("color:#7ee787; border-color:#39704a; background:#173326;")
 
         if plan.warning:
-            self.warning.setText("▲  " + plan.warning)
-            self.warning.show()
+            self.status.setToolTip(plan.warning)
+            self.warning.hide()
         else:
+            self.status.setToolTip("")
             self.warning.hide()
 
 
@@ -501,9 +442,15 @@ class PlanningPage(BasePlanningPage):
         if self._all_screws_accepted():
             self._show_construct_review()
 
+    def _skip_and_next(self) -> None:
+        super()._skip_and_next()
+        if self._all_screws_accepted():
+            self._show_construct_review()
+
     def _all_screws_accepted(self) -> bool:
         return bool(self._queue) and all(
-            key in self.plans and key in self.accepted for key in self._queue
+            key in self.skipped or (key in self.plans and key in self.accepted)
+            for key in self._queue
         )
 
     def _show_construct_review(self) -> None:
@@ -529,6 +476,7 @@ class PlanningPage(BasePlanningPage):
             self.accepted,
             self._rod_plans,
             collisions,
+            skipped=self.skipped,
         )
         self._start_assessments()
         self.construct_review.show()

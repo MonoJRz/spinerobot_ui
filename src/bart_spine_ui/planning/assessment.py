@@ -32,6 +32,10 @@ class ScrewAssessment:
     boundary_mesh: vtk.vtkPolyData | None = field(default=None, repr=False, compare=False)
 
     screw_mesh: vtk.vtkPolyData | None = field(default=None, repr=False, compare=False)
+    # Geometric containment, independent of CT attenuation and shell sample availability.
+    model_coverage: float | None = None
+    model_coverage_reason: str = ""
+
 
     @property
     def below_voxel_spacing(self):
@@ -44,6 +48,53 @@ class ScrewAssessment:
             return "—"
         return "<0.1 mm" if 0 < self.breach_mm < .05 else f"{self.breach_mm:.1f} mm"
 
+
+
+def surface_area_coverage(screw_mesh, bone_mesh):
+    """Estimate fraction of screw surface inside a closed, unsmoothed bone mesh.
+
+    Four equal-area subtriangle centroids per triangle avoid vertex-density bias.
+    Caller supplies the screw surface after the fixed entry exclusion.
+    """
+    if bone_mesh is None or not vtk.vtkSelectEnclosedPoints.IsSurfaceClosed(bone_mesh):
+        raise ValueError("Vertebra mesh is not closed; Coverage unavailable")
+    if screw_mesh is None:
+        raise ValueError("No screw surface for Coverage")
+    triangles = vtk.vtkTriangleFilter()
+    triangles.SetInputData(screw_mesh)
+    triangles.PassLinesOff()
+    triangles.PassVertsOff()
+    triangles.Update()
+    mesh = triangles.GetOutput()
+    if not mesh.GetNumberOfPolys():
+        raise ValueError("No screw surface for Coverage")
+    points = vtk_to_numpy(mesh.GetPoints().GetData())
+    cells = vtk_to_numpy(mesh.GetPolys().GetConnectivityArray()).reshape(-1, 3)
+    vertices = points[cells].astype(float)
+    areas = np.linalg.norm(np.cross(vertices[:, 1]-vertices[:, 0],
+                                    vertices[:, 2]-vertices[:, 0]), axis=1)/2
+    keep = np.isfinite(areas) & (areas > 0)
+    vertices, areas = vertices[keep], areas[keep]
+    if not len(areas):
+        raise ValueError("Degenerate screw surface; Coverage unavailable")
+    barycentric = np.array([[2/3, 1/6, 1/6], [1/6, 2/3, 1/6],
+                            [1/6, 1/6, 2/3], [1/3, 1/3, 1/3]])
+    samples = np.einsum('sv,tvc->tsc', barycentric, vertices).reshape(-1, 3)
+    vtk_points = vtk.vtkPoints()
+    vtk_points.SetData(numpy_to_vtk(np.ascontiguousarray(samples), deep=True))
+    cloud = vtk.vtkPolyData()
+    cloud.SetPoints(vtk_points)
+    enclosed = vtk.vtkSelectEnclosedPoints()
+    enclosed.SetInputData(cloud)
+    enclosed.SetSurfaceData(bone_mesh)
+    enclosed.SetTolerance(1e-6)
+    enclosed.CheckSurfaceOn()
+    enclosed.Update()
+    inside = vtk_to_numpy(enclosed.GetOutput().GetPointData().GetArray("SelectedPoints"))
+    if np.all(inside):
+        return 1.0
+    fractions = inside.reshape(-1, 4).mean(axis=1)
+    return float(np.clip(np.dot(areas, fractions)/areas.sum(), 0., 1.))
 
 
 def gertzbein_robbins(distance):
@@ -244,8 +295,14 @@ class ScrewAssessmentService:
         count = valid.sum(axis=(1, 2))
         hu = np.divide(np.where(valid, values, 0).sum(axis=(1, 2)), count,
                        out=np.full(depth.shape, np.nan), where=count > 0)
+        model_coverage = None
+        model_reason = ""
+        try:
+            model_coverage = surface_area_coverage(screw_mesh, self._meshes.get(label))
+        except ValueError as error:
+            model_reason = str(error)
         return ScrewAssessment(breach, grade, depth, hu,
                                count/(3*len(theta)), reason, exclusion,
                                breach_point, bone_point, breach_depth,
                                tuple(self.segmentation.sitk_image.GetSpacing()),
-                               self._meshes.get(label), screw_mesh)
+                               self._meshes.get(label), screw_mesh, model_coverage, model_reason)

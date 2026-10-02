@@ -81,6 +81,7 @@ class PlanningPage(WorkflowPage):
         self._queue: list[tuple[str, Side]] = []
         self._target_index = 0
         self.plans: dict[tuple[str, Side], ScrewPlan] = {}
+        self.skipped: set[tuple[str, Side]] = set()
         self.accepted: set[tuple[str, Side]] = set()
         self._auto_dimensions: dict[tuple[str, Side], tuple[float, float]] = {}
 
@@ -97,11 +98,38 @@ class PlanningPage(WorkflowPage):
         main.addWidget(self.workspace, 1)
         main.addWidget(self.screw_table)
 
+        # Move the entire decision card below the table, retaining its state and signals.
+        self.left_sidebar.layout().removeWidget(self.left_sidebar.decision_card)
+        self.screw_table.layout().addWidget(self.left_sidebar.decision_card)
+        self.left_sidebar.decision_card.setStyleSheet("""
+            QPushButton#AcceptPlanningButton, QPushButton#RejectPlanningButton {
+                min-height:52px; border-radius:8px; font-size:25px; font-weight:800;
+            }
+            QPushButton#AcceptPlanningButton {
+                background:#123f2b; color:#7ee787; border:1px solid #2e7b50;
+            }
+            QPushButton#AcceptPlanningButton:hover { background:#1b5a3c; }
+            QPushButton#RejectPlanningButton {
+                background:#462126; color:#ff8b91; border:1px solid #8f4149;
+            }
+            QPushButton#RejectPlanningButton:hover { background:#672d35; }
+            QPushButton#SkipPlanningButton {
+                background:#f2c94c; color:#201b0a; border:1px solid #ffdf78;
+                border-radius:7px; min-height:48px; font-size:13px; font-weight:800;
+            }
+            QPushButton#SkipPlanningButton:hover { background:#ffdc73; }
+            QPushButton#SkipPlanningButton:pressed { background:#d8ad30; }
+            QPushButton#SkipPlanningButton:disabled {
+                background:#4c4329; color:#aaa080; border-color:#655a37;
+            }
+        """)
+
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
 
         self.left_sidebar.segmentation_requested.connect(self._start_segmentation)
         self.left_sidebar.accept_next_requested.connect(self._accept_and_next)
+        self.left_sidebar.skip_requested.connect(self._skip_and_next)
         self.left_sidebar.reject_requested.connect(self._reject_current)
         self.left_sidebar.target_requested.connect(self._select_and_mark_target)
         self.workspace.entry_point_picked.connect(self._entry_point_picked)
@@ -159,6 +187,7 @@ class PlanningPage(WorkflowPage):
             allowed = set(parsed)
             self.plans = {key: plan for key, plan in self.plans.items() if key[0] in allowed}
             self.accepted = {key for key in self.accepted if key[0] in allowed}
+            self.skipped = {key for key in self.skipped if key[0] in allowed}
             self._auto_dimensions = {
                 key: value for key, value in self._auto_dimensions.items() if key[0] in allowed
             }
@@ -184,6 +213,7 @@ class PlanningPage(WorkflowPage):
         self.current_segmentation = None
         self.plans.clear()
         self.accepted.clear()
+        self.skipped.clear()
         self._auto_dimensions.clear()
         self._queue.clear()
         self._target_index = 0
@@ -262,6 +292,7 @@ class PlanningPage(WorkflowPage):
         self.current_segmentation = None
         self.plans.clear()
         self.accepted.clear()
+        self.skipped.clear()
         self._auto_dimensions.clear()
         self.workspace.clear_segmentation()
         self.screw_table.clear()
@@ -387,6 +418,10 @@ class PlanningPage(WorkflowPage):
         if self.levels_of_interest:
             allowed.intersection_update(self.levels_of_interest)
         stored_plans = {key: plan for key, plan in stored_plans.items() if key[0] in allowed}
+        self.skipped = {
+            key for key in self.planning_service.load_skipped(volume)
+            if key[0] in allowed and key not in stored_plans
+        }
         if stored_plans:
             self.plans = stored_plans
             self.accepted = stored_accepted.intersection(stored_plans)
@@ -449,6 +484,7 @@ class PlanningPage(WorkflowPage):
         level, side = key
         plan = self.plans.get(key)
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self.left_sidebar.set_target(
             self._target_index,
             len(self._queue),
@@ -510,6 +546,7 @@ class PlanningPage(WorkflowPage):
             self._begin_entry_marking()
             return
 
+        self.skipped.discard(key)
         self.plans[key] = plan
         self.accepted.discard(key)
         self._auto_dimensions[key] = (plan.diameter_mm, plan.length_mm)
@@ -525,6 +562,7 @@ class PlanningPage(WorkflowPage):
             has_plan=True,
         )
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self._show_plan(plan, remember_auto=True)
         self._save_plans()
         self.status_changed.emit(
@@ -575,6 +613,7 @@ class PlanningPage(WorkflowPage):
         self.plans[key] = updated
         self.accepted.discard(key)
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self.workspace.set_plans(self.plans, active_key=key)
         self._sync_screw_table()
         self._save_plans()
@@ -595,6 +634,7 @@ class PlanningPage(WorkflowPage):
         self.plans[key] = updated
         self.accepted.discard(key)
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self.workspace.set_plans(self.plans, active_key=key)
         self._sync_screw_table()
         self.left_sidebar.set_plan_measurements(
@@ -619,6 +659,7 @@ class PlanningPage(WorkflowPage):
         self.plans[key] = updated
         self.accepted.discard(key)
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self.workspace.set_plans(self.plans, active_key=key)
         self._show_plan(updated, remember_auto=False)
         self._sync_screw_table()
@@ -630,24 +671,46 @@ class PlanningPage(WorkflowPage):
         key = self._queue[self._target_index]
         if key not in self.plans:
             return
+        self.skipped.discard(key)
         self.accepted.add(key)
+        self._finish_target(f"Accepted {key[0]} {key[1]} screw")
+
+    def _skip_and_next(self) -> None:
+        if not self._queue or self.current_segmentation is None:
+            return
+        key = self._queue[self._target_index]
+        self.plans.pop(key, None)
+        self.accepted.discard(key)
+        self._auto_dimensions.pop(key, None)
+        self.skipped.add(key)
+        self.workspace.set_pending_entry_point(None)
+        self.workspace.begin_entry_point_marking(False)
+        self.left_sidebar.set_marking(False)
+        self.workspace.set_plans(self.plans, active_key=None)
+        self.workspace.screw_overlay.clear_plan()
+        self.left_sidebar.clear_plan_measurements()
+        self._finish_target(f"Skipped {key[0]} {key[1]}")
+
+    def _finish_target(self, message: str) -> None:
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self._sync_screw_table()
-        saved = self._save_plans()
-        level, side = key
-        if self._target_index < len(self._queue) - 1:
-            self._target_index += 1
-            next_level, next_side = self._queue[self._target_index]
+        self._save_plans()
+        # Wrap around to unresolved targets when the user plans out of order.
+        for offset in range(1, len(self._queue) + 1):
+            index = (self._target_index + offset) % len(self._queue)
+            key = self._queue[index]
+            if key in self.skipped or (key in self.accepted and key in self.plans):
+                continue
+            self._target_index = index
             self._activate_target()
-            self._begin_entry_marking()
-            self.status_changed.emit(
-                f"Accepted {level} {side} screw — mark {next_level} {next_side} entry"
-            )
+            if key not in self.plans:
+                self._begin_entry_marking()
+            self.status_changed.emit(f"{message} — next: {key[0]} {key[1]}")
             return
         self.status_changed.emit(
-            f"Planning complete — saved to {saved}"
-            if saved
-            else "Planning complete"
+            f"{message} — planning complete" if self.plans
+            else "All targets skipped — select a level and side to add a screw"
         )
 
     def _previous_target(self) -> None:
@@ -685,6 +748,7 @@ class PlanningPage(WorkflowPage):
         self.workspace.screw_overlay.clear_plan()
         self.left_sidebar.clear_plan_measurements()
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self._sync_screw_table()
         self._save_plans()
         self.status_changed.emit(f"Rejected {key[0]} {key[1]} screw")
@@ -721,6 +785,7 @@ class PlanningPage(WorkflowPage):
                 has_plan=False,
             )
         self.left_sidebar.set_completed(self.accepted)
+        self.left_sidebar.set_skipped(self.skipped)
         self._sync_screw_table()
         self._save_plans()
         self.status_changed.emit(f"Deleted {level} {side} screw")
@@ -739,6 +804,7 @@ class PlanningPage(WorkflowPage):
                 self.plans,
                 case_region=self.case_region,
                 accepted=self.accepted,
+                skipped=self.skipped,
             )
         except OSError as exc:
             self.left_sidebar.set_status(f"Could not save planning JSON: {exc}", "warning")

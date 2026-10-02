@@ -104,3 +104,17 @@ def test_separated_screws_are_not_collisions() -> None:
         ("L5", "left"): _screw("L5", "left", (20.0, 10.0, -20.0)),
     }
     assert find_screw_collisions(plans) == []
+
+
+def test_rods_use_only_selected_levels_on_each_side():
+    plans = {
+        (level, "left"): _screw(level, "left", (20., 10., z))
+        for level, z in (("L1", 90.), ("L3", 30.), ("L4", 0.))
+    }
+    plans[("L1", "right")] = _screw("L1", "right", (-20., 10., 90.))
+    left = build_rod_plan(plans, "left")
+    assert left.levels == ("L1", "L3", "L4")
+    assert set(left.seat_points_lps_mm) == {"L1", "L3", "L4"}
+    assert build_rod_plan(plans, "right") is None
+    plans[("L4", "right")] = _screw("L4", "right", (-20., 10., 0.))
+    assert build_rod_plan(plans, "right").levels == ("L1", "L4")

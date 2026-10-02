@@ -71,7 +71,7 @@ class ScrewAdjustmentOverlay(QFrame):
         self.reset_button.setObjectName("AutoButton")
         self.reset_button.setToolTip("Restore the automatically estimated diameter and length")
         header.addWidget(self.title)
-        header.addWidget(self.estimate, 1)
+        self.estimate.setVisible(False)
         header.addWidget(self.reset_button)
         root.addLayout(header)
 

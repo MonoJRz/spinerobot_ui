@@ -289,6 +289,7 @@ class PediclePlanningService:
         *,
         case_region: str | None = None,
         accepted: set[tuple[str, Side]] | None = None,
+        skipped: set[tuple[str, Side]] | None = None,
     ) -> Path | None:
         if volume.source_path is None:
             return None
@@ -306,6 +307,7 @@ class PediclePlanningService:
             "units": "mm",
             "case_region": case_region,
             "algorithm_status": "research prototype - manual verification required",
+            "skipped": [list(key) for key in sorted((skipped or set()) - plans.keys())],
             "plans": [
                 {
                     **plan.to_dict(),
@@ -318,6 +320,21 @@ class PediclePlanningService:
         }
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return path
+
+    def load_skipped(self, volume: MedicalVolume) -> set[tuple[str, Side]]:
+        """Read optional omissions; older planning files contain none."""
+        path = self.plan_path(volume)
+        if path is None or not path.is_file():
+            return set()
+        try:
+            rows = json.loads(path.read_text(encoding="utf-8")).get("skipped", [])
+            return {
+                (row[0], row[1]) for row in rows
+                if isinstance(row, list) and len(row) == 2
+                and row[0] in LEVEL_ORDER and row[1] in ("left", "right")
+            }
+        except (OSError, ValueError, TypeError, AttributeError):
+            return set()
 
     def load_plans(
         self,

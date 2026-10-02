@@ -1,20 +1,20 @@
-"""Touch-friendly construct assessment with a shared HU scale and entry band."""
-import numpy as np
+"""Compact level-by-level grading and a separate CT analysis dialog."""
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 
 from ..planning.assessment import DEFAULT_ENTRY_EXCLUSION_MM, ScrewAssessmentService
+from ..planning.service import LEVEL_ORDER
+from .hu_analysis_dialog import HUAnalysisDialog
 
 GRADE_COLORS = {"A": "#7ee787", "B": "#d7df74", "C": "#f1c96b",
                 "D": "#ff9a62", "E": "#ff737e", "—": "#8ea9ba"}
-HU_MIN, HU_MAX = 0., 1000.
 
 
 class AssessmentWorker(QThread):
@@ -41,200 +41,114 @@ class AssessmentWorker(QThread):
             self.failed.emit(str(error))
 
 
-def hu_color(value):
-    if not np.isfinite(value):
-        return QColor("#35434d")
-    fraction = float(np.clip((value-HU_MIN)/(HU_MAX-HU_MIN), 0, 1))
-    return QColor.fromRgbF(.14 + .72*fraction, .30 + .58*fraction, .48 + .46*fraction)
-
-
-class HULegend(QWidget):
-    """The same transfer function as the data strips, with explicit HU ticks."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMinimumHeight(78)
-        self.setAccessibleName("HU scale: 0, 250, 500, 750, 1000. Gray: no sample.")
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        width = max(1, self.width()-1)
-        for x in range(self.width()):
-            painter.fillRect(x, 2, 1, 20, hu_color(HU_MIN+x/width*(HU_MAX-HU_MIN)))
-        painter.setPen(QColor("#dce9f0"))
-        for tick in (0, 250, 500, 750, 1000):
-            x = int(tick/HU_MAX*width)
-            painter.drawLine(x, 22, x, 27)
-            label = f"{tick}"
-            label_width = painter.fontMetrics().horizontalAdvance(label)
-            left = max(0, min(self.width()-label_width, x-label_width//2))
-            painter.drawText(left, 43, label)
-        painter.fillRect(0, 57, 14, 14, hu_color(np.nan))
-        painter.drawText(21, 69, "No sample")
-        painter.drawText(self.width()-28, 69, "HU")
-
-
-class EntryBand(QWidget):
-    """Separate grading band so excluded HU remains visible and unmodified."""
-    def __init__(self, result, parent=None):
-        super().__init__(parent)
-        self.result = result
-        self.setFixedHeight(30)
-        self.setAccessibleName(f"First {result.entry_exclusion_mm:g} mm excluded from G–R")
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        length = max(float(self.result.depth_mm[-1]), .001)
-        width = int(self.width()*min(self.result.entry_exclusion_mm/length, 1))
-        painter.fillRect(0, 1, self.width(), 6, QColor("#497888"))
-        painter.fillRect(0, 1, width, 6, QColor("#f1c96b"))
-        painter.setPen(QColor("#a9c0ce"))
-        painter.drawText(0, 25, "Entry")
-        text = f"{length:g} mm · Tip"
-        painter.drawText(self.width()-painter.fontMetrics().horizontalAdvance(text), 25, text)
-
-
-class DensityStrip(QWidget):
-    sample_selected = Signal(int)
-
-    def __init__(self, result, parent=None):
-        super().__init__(parent)
-        self.result = result
-        self.selected_index = None
-        self.setMinimumHeight(56)
-        self.setMouseTracking(True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setAccessibleName("Peri-screw HU. Tap or use arrow keys to inspect entry to tip.")
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        width = self.width()/max(1, len(self.result.hu))
-        for index, value in enumerate(self.result.hu):
-            painter.fillRect(int(index*width), 4, int(width)+1, self.height()-8, hu_color(value))
-        if self.selected_index is not None:
-            x = int((self.selected_index+.5)*width)
-            painter.setPen(QPen(QColor("#0b1014"), 5))
-            painter.drawLine(x, 0, x, self.height())
-            painter.setPen(QPen(QColor("#ffffff"), 2))
-            painter.drawLine(x, 0, x, self.height())
-        if self.hasFocus():
-            painter.setPen(QPen(QColor("#7dd3ed"), 2))
-            painter.drawRect(1, 1, self.width()-2, self.height()-2)
-
-    def _select(self, index):
-        if not len(self.result.hu):
-            return
-        self.selected_index = min(len(self.result.hu)-1, max(0, index))
-        self.sample_selected.emit(self.selected_index)
-        self.update()
-
-    def _select_position(self, event):
-        self._select(int(event.position().x()/max(1, self.width())*len(self.result.hu)))
-        event.accept()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.setFocus()
-            self._select_position(event)
-
-    def mouseMoveEvent(self, event):
-        self._select_position(event)
-
-    def keyPressEvent(self, event):
-        index = self.selected_index if self.selected_index is not None else 0
-        if event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right):
-            self._select(index + (1 if event.key() == Qt.Key.Key_Right else -1))
-        elif event.key() == Qt.Key.Key_Home:
-            self._select(0)
-        elif event.key() == Qt.Key.Key_End:
-            self._select(len(self.result.hu)-1)
-        else:
-            super().keyPressEvent(event)
-
-
 class ScrewAssessmentPanel(QFrame):
     locate_breach_requested = Signal(object)
+    PAGE_SIZE = 5
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("RodCard")
         self.results = {}
+        self.levels = []
+        self.accepted = set()
+        self.skipped = set()
+        self.page = 0
+        self.selected_key = None
+        self.hu_dialog = None
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
-        title = QLabel("SCREW ASSESSMENT")
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(5)
+        title = QLabel("SCREW GRADING · G–R")
         title.setObjectName("RodTitle")
-        layout.addWidget(title)
+        title_row = QHBoxLayout()
+        title_row.addWidget(title, 1)
+        layout.addLayout(title_row)
         self.status = QLabel("No measurements")
-        self.status.setObjectName("ConstructHint")
+        self.status.setObjectName("AssessmentNote")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-
-        # entry_note = QLabel("First 10 mm excluded from G–R")
-        # entry_note.setStyleSheet("color:#f1c96b; font-size:12px;")
-        # layout.addWidget(entry_note)
-
-        # Keep the existing checkable API for volume-reset integration.
-        self.hu_confirmed = QPushButton("Show CT values · HU")
-        self.hu_confirmed.setObjectName("AssessmentTouch")
+        self.rows = QGridLayout()
+        self.rows.setSpacing(6)
+        self.rows.setColumnStretch(1, 1)
+        self.rows.setColumnStretch(2, 1)
+        layout.addLayout(self.rows)
+        pager = QHBoxLayout()
+        self.previous = QPushButton("←")
+        self.next = QPushButton("→")
+        self.previous.setFixedSize(30, 28)
+        self.next.setFixedSize(30, 28)
+        self.previous.setAccessibleName("Previous five levels")
+        self.next.setAccessibleName("Next five levels")
+        self.page_label = QLabel()
+        self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.previous.clicked.connect(lambda: self._change_page(-1))
+        self.next.clicked.connect(lambda: self._change_page(1))
+        pager.addWidget(self.previous)
+        pager.addWidget(self.page_label, 1)
+        pager.addWidget(self.next)
+        title_row.addLayout(pager)
+        self.detail = QLabel("Select a G–R box for breach details")
+        self.detail.setWordWrap(True)
+        self.detail.setMinimumHeight(40)
+        self.detail.setObjectName("AssessmentNote")
+        layout.addWidget(self.detail)
+        self.locate_button = QPushButton("Locate selected breach in 3D")
+        self.locate_button.setMinimumHeight(38)
+        self.locate_button.setEnabled(False)
+        self.locate_button.clicked.connect(self._locate_selected)
+        layout.addWidget(self.locate_button)
+        layout.addStretch(1)
+        # legend = QLabel("G–R: A 0 · B ≤2 · C ≤4 · D ≤6 · E >6 mm")
+        # legend.setWordWrap(True)
+        # legend.setObjectName("AssessmentNote")
+        # layout.addWidget(legend)
+        # note = QLabel(f"Estimated whole-vertebra grade · first {DEFAULT_ENTRY_EXCLUSION_MM:g} mm excluded")
+        # note.setWordWrap(True)
+        # note.setObjectName("AssessmentNote")
+        # layout.addWidget(note)
+        self.hu_confirmed = QPushButton("Open HU analysis ↗")
         self.hu_confirmed.setCheckable(True)
-        self.hu_confirmed.setMinimumHeight(56)
-        self.hu_confirmed.setAccessibleName("Show CT values in Hounsfield units")
-        self.hu_confirmed.setToolTip("Use with calibrated CT Hounsfield units, not normalized intensities.")
+        self.hu_confirmed.setMinimumHeight(44)
+        self.hu_confirmed.setEnabled(False)
         self.hu_confirmed.toggled.connect(self._toggle_hu)
         layout.addWidget(self.hu_confirmed)
-        self.hu_note = QLabel("Use calibrated CT (HU)")
-        self.hu_note.setObjectName("AssessmentNote")
-        layout.addWidget(self.hu_note)
-        self.hu_legend = HULegend()
-        self.hu_legend.hide()
-        layout.addWidget(self.hu_legend)
-        self.rows = QVBoxLayout()
-        self.rows.setSpacing(12)
-        layout.addLayout(self.rows)
-        legend = QLabel("G–R: A 0 · B ≤2 · C ≤4 · D ≤6 · E >6 mm")
-        legend.setWordWrap(True)
-        legend.setObjectName("AssessmentNote")
-        legend.setToolTip(
-            "Estimated Gertzbein–Robbins grade after the fixed 10 mm entry exclusion.\n"
-            "Whole-vertebra estimate; verify pedicle on CT.\n"
-            "HU: mean in segmented bone in a 1 mm shell outside the shaft.\n"
-            "0–1000 HU color scale; values outside it use the endpoint colors."
-        )
-        layout.addWidget(legend)
         self.setStyleSheet("""
-            QPushButton#AssessmentTouch {
-                background:#204c65; color:#f0f8fc; border:2px solid #548bab;
-                border-radius:8px; padding:4px 8px; font-size:15px; font-weight:700;
-            }
-            QPushButton#AssessmentTouch:checked { background:#196c82; border-color:#84def3; }
-            QPushButton#AssessmentTouch:pressed { background:#328ba4; }
-            QPushButton#AssessmentTouch:focus { border-color:white; }
-            QPushButton#AssessmentTouch:disabled { background:#1a2730; color:#718792; border-color:#344954; }
-            QLabel#AssessmentNote { color:#b6cbd6; font-size:12px; }
+            QLabel#AssessmentNote { color:#bccbd7; font-size:12px; }
+            QPushButton { background:#24384a; color:#f2f6ff; border:1px solid #55758f;
+                border-radius:6px; padding:5px; font-size:13px; }
+            QPushButton:disabled { color:#778a99; border-color:#344452; }
+            QPushButton:focus { border:2px solid #f0f5ff; }
+            QPushButton:checked { background:#364d67; }
         """)
 
-    def _toggle_hu(self, checked):
-        self.hu_confirmed.setText("Hide CT values · HU" if checked else "Show CT values · HU")
-        self.hu_legend.setVisible(checked)
-        self.hu_note.setText("Tap strip for HU · Entry → Tip" if checked else "Use calibrated CT (HU)")
+    def set_targets(self, levels, accepted, skipped):
+        self.levels = list(levels)
+        self.accepted, self.skipped = set(accepted), set(skipped)
+        self.page = 0
+        self._populate()
+
+    def _change_page(self, direction):
+        self.page = max(0, min(self.page+direction, (len(self.levels)-1)//self.PAGE_SIZE))
         self._populate()
 
     def set_results(self, results):
+        self.hu_confirmed.setChecked(False)
         self.results = results
-        self.status.setText("Screw mesh breach · estimated G–R")
+        if not self.levels:
+            self.levels = sorted({key[0] for key in results}, key=LEVEL_ORDER.index)
+        self.status.setText("")
+        self.status.hide()
+        self.hu_confirmed.setEnabled(bool(results))
         self._populate()
 
     def clear(self, text="Measuring…"):
+        self.hu_confirmed.setChecked(False)
+        self.hu_confirmed.setEnabled(False)
         self.results = {}
+        self.selected_key = None
         self.status.setText(text)
+        self.status.setVisible(bool(text))
         self._populate()
-
-    @staticmethod
-    def _sample_text(result, index):
-        value = result.hu[index]
-        hu = f"{value:.0f} HU" if np.isfinite(value) else "No sample"
-        return (f"{hu} · {result.depth_mm[index]:.1f} mm from entry\n"
-                f"Bone coverage {result.coverage[index]:.0%}")
 
     def _populate(self):
         while self.rows.count():
@@ -242,45 +156,90 @@ class ScrewAssessmentPanel(QFrame):
             if widget:
                 widget.hide()
                 widget.deleteLater()
-        for (level, side), result in self.results.items():
-            card = QWidget()
-            layout = QVBoxLayout(card)
-            layout.setContentsMargins(0, 5, 0, 5)
-            layout.setSpacing(6)
-            distance = result.breach_text
-            label = QLabel(f"{level} {side[0].upper()}     {result.grade}     {distance}")
-            label.setStyleSheet(f"color:{GRADE_COLORS[result.grade]}; font-size:15px; font-weight:700;")
-            layout.addWidget(label)
-            if result.breach_depth_mm is not None:
-                location = QLabel(f"At {result.breach_depth_mm:.1f} mm from entry")
-                location.setObjectName("AssessmentNote")
-                layout.addWidget(location)
-            if result.below_voxel_spacing:
-                resolution = QLabel(f"Below voxel spacing ({min(result.voxel_spacing_mm):g} mm)")
-                resolution.setStyleSheet("color:#f1c96b; font-size:12px;")
-                resolution.setWordWrap(True)
-                layout.addWidget(resolution)
-            if result.breach_point_lps is not None:
-                locate = QPushButton("Locate breach")
-                locate.setObjectName("AssessmentTouch")
-                locate.setMinimumHeight(56)
-                locate.clicked.connect(
-                    lambda _checked=False, key=(level, side): self.locate_breach_requested.emit(key))
-                layout.addWidget(locate)
-            if result.reason:
-                reason = QLabel(result.reason)
-                reason.setWordWrap(True)
-                reason.setObjectName("AssessmentNote")
-                layout.addWidget(reason)
-            layout.addWidget(EntryBand(result))
-            if self.hu_confirmed.isChecked():
-                strip = DensityStrip(result)
-                layout.addWidget(strip)
-                value = QLabel("Tap strip for CT value")
-                value.setObjectName("AssessmentNote")
-                value.setMinimumHeight(38)
-                value.setWordWrap(True)
-                strip.sample_selected.connect(
-                    lambda index, result=result, value=value: value.setText(self._sample_text(result, index)))
-                layout.addWidget(value)
-            self.rows.addWidget(card)
+        self.grade_buttons = {}
+        for column, text in enumerate(("LEVEL", "LEFT · G–R", "RIGHT · G–R")):
+            label = QLabel(text)
+            label.setStyleSheet("color:#b7cadb; font-size:12px; font-weight:700;")
+            self.rows.addWidget(label, 0, column)
+        visible = self.levels[self.page*self.PAGE_SIZE:(self.page+1)*self.PAGE_SIZE]
+        for row, level in enumerate(visible, 1):
+            label = QLabel(level)
+            label.setStyleSheet("color:#f0f5ff; font-size:17px; font-weight:700;")
+            self.rows.addWidget(label, row, 0)
+            for column, side in enumerate(("left", "right"), 1):
+                key = (level, side)
+                result = self.results.get(key)
+                if key in self.skipped:
+                    text, color = "Skipped", "#8ea9ba"
+                elif result is not None:
+                    text = f"G–R {result.grade}  ·  {result.breach_text}"
+                    color = GRADE_COLORS.get(result.grade, GRADE_COLORS["—"])
+                else:
+                    text = "Measuring…" if key in self.accepted else "Not planned"
+                    color = "#8ea9ba"
+                button = QPushButton(text)
+                button.setMinimumHeight(48)
+                button.setCheckable(True)
+                button.setAccessibleName(f"{level} {side}: {text}")
+                button.setStyleSheet(
+                    f"QPushButton {{color:{color}; border:1px solid {color}; "
+                    "background:#1b2b39; font-size:13px; font-weight:700;}"
+                    "QPushButton:checked {background:#31485a; border:2px solid #edf4ff;}"
+                )
+                button.clicked.connect(lambda checked=False, key=key: self._select(key))
+                self.rows.addWidget(button, row, column)
+                self.grade_buttons[key] = button
+        paged = len(self.levels) > self.PAGE_SIZE
+        self.previous.setVisible(paged)
+        self.next.setVisible(paged)
+        self.page_label.setVisible(paged)
+        self.previous.setEnabled(self.page > 0)
+        self.next.setEnabled((self.page+1)*self.PAGE_SIZE < len(self.levels))
+        self.page_label.setText(f"{self.page+1} / {max(1, (len(self.levels)+self.PAGE_SIZE-1)//self.PAGE_SIZE)}")
+        if self.selected_key not in self.grade_buttons:
+            self.selected_key = next((key for key in self.grade_buttons if key in self.results), None)
+        self._select(self.selected_key)
+
+    def _select(self, key):
+        self.selected_key = key
+        result = self.results.get(key)
+        self.locate_button.setEnabled(result is not None and result.breach_point_lps is not None)
+        for target, button in self.grade_buttons.items():
+            button.setChecked(target == key)
+        if result is None:
+            self.detail.setText("Select a G–R box for breach details" if key is None else
+                                f"{key[0]} {key[1]} · " + ("Skipped" if key in self.skipped else "No measurements"))
+            return
+        text = f"{key[0]} {key[1].upper()} · G–R {result.grade} · breach {result.breach_text}"
+        if result.breach_depth_mm is not None:
+            text += f"\nAt {result.breach_depth_mm:.1f} mm from entry"
+        if result.below_voxel_spacing:
+            text += f" · Below voxel spacing ({min(result.voxel_spacing_mm):g} mm)"
+        if result.reason:
+            text += f"\n{result.reason}"
+        self.detail.setText(text)
+
+    def _locate_selected(self):
+        if self.locate_button.isEnabled():
+            self.locate_breach_requested.emit(self.selected_key)
+
+    def _toggle_hu(self, checked):
+        if not checked:
+            if self.hu_dialog is not None:
+                self.hu_dialog.close()
+            return
+        if not self.results:
+            self.hu_confirmed.setChecked(False)
+            return
+        if self.hu_dialog is not None:
+            self.hu_dialog.deleteLater()
+        self.hu_dialog = HUAnalysisDialog(self.results, self, levels=self.levels, skipped=self.skipped)
+        self.hu_dialog.finished.connect(lambda _: self.hu_confirmed.setChecked(False))
+        if self.selected_key in self.results:
+            self.hu_dialog.focus_target(self.selected_key)
+        self.hu_dialog.show()
+        self.hu_dialog.raise_()
+
+    def hideEvent(self, event):
+        self.hu_confirmed.setChecked(False)
+        super().hideEvent(event)

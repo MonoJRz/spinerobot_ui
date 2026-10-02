@@ -91,7 +91,7 @@ class ScrewTablePanel(QFrame):
         root.addWidget(self.table, 1)
 
         self.hint = QLabel(
-            "Screws are saved automatically. Select a row to review or adjust it."
+            "Select a screw to adjust"
         )
         self.hint.setObjectName("TableHint")
         self.hint.setWordWrap(True)
@@ -155,9 +155,9 @@ class ScrewTablePanel(QFrame):
     def _sync_empty_state(self) -> None:
         empty = not self._row_keys
         self.hint.setText(
-            "No screws planned yet. Select a level and press + or MARK ENTRY POINT."
+            "No screws · select a level and mark entry"
             if empty
-            else "Screws are saved automatically. Select a row to review or adjust it."
+            else "Select a screw to adjust"
         )
 
     def _selection_changed(self) -> None:

@@ -131,12 +131,6 @@ class ProcedureShell(QWidget):
         footer_layout.addWidget(self.system_status)
         footer_layout.addStretch(1)
 
-        # PLACEHOLDER: Replace version text with package/release metadata.
-        product = QLabel("Spinal Surgical Robot   |    Version 0.1.0")
-        product.setObjectName("FooterMeta")
-        footer_layout.addWidget(product)
-        footer_layout.addStretch(1)
-
         self.dataset_status = QLabel("▣  Waiting for clinical CT")
         self.dataset_status.setObjectName("FooterMeta")
         footer_layout.addWidget(self.dataset_status)

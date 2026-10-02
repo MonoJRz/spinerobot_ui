@@ -20,6 +20,7 @@ class PlanningLeftSidebar(QFrame):
     segmentation_requested = Signal()
     accept_next_requested = Signal()
     reject_requested = Signal()
+    skip_requested = Signal()
     target_requested = Signal(str, str)
 
     def __init__(self, parent=None):
@@ -32,6 +33,7 @@ class PlanningLeftSidebar(QFrame):
         # Explicit plan state; do not infer it from button enabled state.
         self._has_plan = False
         self._target_buttons: dict[tuple[str, str], QPushButton] = {}
+        self._skipped: set[tuple[str, str]] = set()
         self._planned: set[tuple[str, str]] = set()
         self._active_key: tuple[str, str] | None = None
 
@@ -55,7 +57,7 @@ class PlanningLeftSidebar(QFrame):
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(9)
         scroll.setWidget(content)
-        shell.addWidget(scroll)
+        shell.addWidget(scroll, 1)
 
         self.segmentation_card, segmentation_layout = self._card("◫   SEGMENTATION")
         self.segmentation_button = QPushButton("◈    RUN SEGMENTATION")
@@ -86,6 +88,7 @@ class PlanningLeftSidebar(QFrame):
         self.content_layout.addLayout(self.three_d_host)
 
         current = QFrame()
+        self.decision_card = current
         current.setObjectName("SidebarCard")
         current_layout = QVBoxLayout(current)
         current_layout.setContentsMargins(14, 11, 14, 13)
@@ -122,8 +125,17 @@ class PlanningLeftSidebar(QFrame):
         decision.addWidget(self.reject_button)
         decision.addWidget(self.accept_button)
         current_layout.addLayout(decision)
-        self.content_layout.addWidget(current)
+        self.skip_button = QPushButton("Skip")
+        self.skip_button.setObjectName("SkipPlanningButton")
+        self.skip_button.setMinimumHeight(48)
+        self.skip_button.setToolTip("Omit the current level and side from the screw and rod plan")
+        self.skip_button.setEnabled(False)
+        self.skip_button.clicked.connect(self.skip_requested)
+        current_layout.addWidget(self.skip_button)
         self.content_layout.addStretch(1)
+        # Keep the complete decision card visible at the bottom of the left sidebar.
+        shell.addSpacing(9)
+        shell.addWidget(current)
 
         self.segmentation_button.clicked.connect(self.segmentation_requested)
         self.accept_button.clicked.connect(self.accept_next_requested)
@@ -218,6 +230,7 @@ class PlanningLeftSidebar(QFrame):
         has_plan: bool,
     ) -> None:
         self._active_key = (level, side)
+        self._sync_action_state()
         self._has_plan = bool(has_plan)
         self.target_label.setText(f"{level}  ·  {side.upper()}")
         self.accept_button.setEnabled(self._has_plan and not self._marking)
@@ -261,11 +274,18 @@ class PlanningLeftSidebar(QFrame):
         self._planned = set(planned)
         self._refresh_target_buttons()
 
+    def set_skipped(self, skipped: set[tuple[str, str]]) -> None:
+        self._skipped = set(skipped)
+        self._refresh_target_buttons()
+
     def _refresh_target_buttons(self) -> None:
         for key, button in self._target_buttons.items():
             active = key == self._active_key
             done = key in self._planned
-            button.setText("●" if active else "✓" if done else "○")
+            button.setText("Skip" if key in self._skipped else "●" if active else "✓" if done else "○")
+            button.setToolTip(f"{key[0]} {key[1]} — " + (
+                "skipped; select to plan a screw" if key in self._skipped else "select screw target"
+            ))
             if active:
                 button.setStyleSheet(
                     "QPushButton { background:#15384d; border:1px solid #58a6ff; "
@@ -283,6 +303,7 @@ class PlanningLeftSidebar(QFrame):
         self._active_key = None
         self.set_marking(False)
         self.set_completed(set())
+        self.set_skipped(set())
         self.clear_plan_measurements()
         self.target_label.setText("—")
         self.target_label.setToolTip("")
@@ -321,6 +342,7 @@ class PlanningLeftSidebar(QFrame):
 
     def _sync_action_state(self) -> None:
         busy = self._running or self._loading
+        self.skip_button.setEnabled(self._active_key is not None and not busy)
         self.segmentation_button.setEnabled(not busy)
         self.segmentation_button.setText(
             "◌    SEGMENTING..."
